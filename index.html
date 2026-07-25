@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yorus Style - Tienda</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- NAVEGACIÓN -->
+    <header>
+        <div class="logo" onclick="switchTab('store')">Yorus Style ✨</div>
+        <nav>
+            <button onclick="switchTab('store')">Tienda</button>
+            <!-- ¡NUEVO! Al hacer clic abre el carrito -->
+            <button onclick="openCartModal()">🛒 <span class="cart-badge" id="cart-count">0</span></button>
+        </nav>
+    </header>
+
+    <!-- VISTA DE LA TIENDA -->
+    <main id="store" class="container active-section">
+        <div class="hero">
+            <h1>Descubre tu estilo</h1>
+            <p>Moda en tonos pasteles que enamoran. Añade tus favoritos al pedido.</p>
+        </div>
+
+        <div class="products-grid">
+            <!-- Producto 1 -->
+            <div class="product-card clickable" onclick="openProductModal(1)">
+                <div class="product-img" style="background-color: #ffb6b9;"></div>
+                <h3>Blusa Rosa Cuarzo</h3>
+                <p class="price">$25.00</p>
+                <button class="btn" onclick="event.stopPropagation(); addToCart(1, this)">Añadir al pedido</button>
+            </div>
+            <!-- Producto 2 -->
+            <div class="product-card clickable" onclick="openProductModal(2)">
+                <div class="product-img" style="background-color: #bbded6;"></div>
+                <h3>Pantalón Menta Suave</h3>
+                <p class="price">$35.00</p>
+                <button class="btn" onclick="event.stopPropagation(); addToCart(2, this)">Añadir al pedido</button>
+            </div>
+            <!-- Producto 3 -->
+            <div class="product-card clickable" onclick="openProductModal(3)">
+                <div class="product-img" style="background-color: #fae3d9;"></div>
+                <h3>Bolso Melocotón</h3>
+                <p class="price">$18.00</p>
+                <button class="btn" onclick="event.stopPropagation(); addToCart(3, this)">Añadir al pedido</button>
+            </div>
+        </div>
+    </main>
+
+    <!-- VENTANA EMERGENTE: CARRITO DE COMPRAS -->
+    <div id="cart-modal" class="modal">
+        <div class="modal-content cart-box">
+            <span class="close-modal" onclick="closeCartModal()">&times;</span>
+            <h3 style="margin-bottom: 20px; color: var(--primary-hover); text-align: left;">🛒 Tu Pedido</h3>
+            
+            <!-- Aquí se inyectarán los productos con JavaScript -->
+            <div id="cart-items-list" class="cart-items-container">
+                <p style="text-align: center; color: #999;">Tu carrito está vacío.</p>
+            </div>
+
+            <div class="cart-footer">
+                <h3>Total: <span id="cart-total-price">$0.00</span></h3>
+                <button class="btn" style="margin-top: 15px;" onclick="alert('Funcionalidad de pago en construcción 🚧')">Ir a Pagar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- VENTANA EMERGENTE: DETALLE DEL PRODUCTO -->
+    <div id="product-modal" class="modal">
+        <div class="modal-content product-modal-layout">
+            <span class="close-modal" onclick="closeProductModal()">&times;</span>
+            
+            <div class="product-gallery">
+                <div class="main-image" id="modal-main-img"></div>
+                <div class="thumbnail-row">
+                    <div class="thumb" id="thumb1" onclick="changeModalImage(this.style.backgroundColor)"></div>
+                    <div class="thumb" id="thumb2" onclick="changeModalImage(this.style.backgroundColor)"></div>
+                    <div class="thumb" id="thumb3" onclick="changeModalImage(this.style.backgroundColor)"></div>
+                </div>
+            </div>
+
+            <div class="product-details">
+                <h2 id="modal-title">Nombre</h2>
+                <p class="price" id="modal-price">$0.00</p>
+                <div class="description">
+                    <p id="modal-desc">Descripción...</p>
+                    <ul id="modal-features"></ul>
+                </div>
+                <button class="btn" id="modal-add-btn" onclick="addToCartFromModal(this)">Añadir al pedido</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- VISTA DEL PANEL DE ADMINISTRADOR -->
+    <main id="admin" class="container">
+        <div class="admin-header">
+            <h2>Dashboard de Gestión</h2>
+            <div>
+                <button class="btn" style="width: auto; background-color: var(--secondary); color: #333;">Descargar Reporte</button>
+                <button class="btn" style="width: auto; background-color: #ccc; margin-left: 10px;" onclick="logoutAdmin()">Cerrar Sesión</button>
+            </div>
+        </div>
+        <div class="stats-grid">
+            <div class="stat-card"><h3>Ventas de Hoy</h3><p class="price">$120.00</p></div>
+            <div class="stat-card"><h3>Pedidos Pendientes</h3><p class="price" style="color: var(--text-color);">4</p></div>
+            <div class="stat-card"><h3>Total Clientes</h3><p class="price" style="color: var(--text-color);">85</p></div>
+        </div>
+        <h3>Últimos Pedidos</h3><br>
+        <table>
+            <thead><tr><th>ID Pedido</th><th>Cliente</th><th>Productos</th><th>Total</th><th>Estado</th></tr></thead>
+            <tbody>
+                <tr><td>#1042</td><td>María López</td><td>Blusa Rosa Cuarzo (x1)</td><td>$25.00</td><td><span class="status pending">Pendiente</span></td></tr>
+                <tr><td>#1041</td><td>Carla Suárez</td><td>Pantalón Menta Suave (x2)</td><td>$70.00</td><td><span class="status completed">Enviado</span></td></tr>
+            </tbody>
+        </table>
+    </main>
+
+    <!-- VENTANA EMERGENTE DE LOGIN ADMIN -->
+    <div id="login-modal" class="modal">
+        <div class="modal-content login-box">
+            <h3>Acceso Privado</h3>
+            <p style="margin-bottom: 15px; font-size: 14px;">Solo personal autorizado.</p>
+            <input type="password" id="admin-password" placeholder="Ingresa la contraseña">
+            <p id="login-error" style="color: red; font-size: 12px; display: none; margin-bottom: 10px;">Contraseña incorrecta</p>
+            <button class="btn" onclick="verifyAdmin()">Entrar</button>
+            <button class="btn btn-close" onclick="closeLoginModal()">Cancelar</button>
+        </div>
+    </div>
+
+    <!-- PIE DE PÁGINA -->
+    <footer>
+        <p>&copy; 2026 Yorus Style. Todos los derechos reservados.</p>
+        <a href="#" class="secret-admin-link" onclick="openLoginModal()">Admin</a>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
