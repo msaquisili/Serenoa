@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Serenoa | Gestión de Producto</title>
+    <!-- Fuentes Google -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="admin-body">
+
+    <div class="admin-layout">
+        <!-- SIDEBAR -->
+        <aside class="admin-sidebar">
+            <!-- BOTÓN DE HAMBURGUESA PEGADO AL SIDEBAR EN EL LADO DERECHO SUPERIOR -->
+            <button id="btn-sidebar-toggle" class="btn-sidebar-toggle" aria-label="Alternar menú lateral" title="Contraer / expandir menú">
+                <div class="hamburger-icon">
+                    <span class="hamburger-line line-1"></span>
+                    <span class="hamburger-line line-2"></span>
+                    <span class="hamburger-line line-3"></span>
+                </div>
+            </button>
+
+            <div class="sidebar-brand">
+                <div class="brand-logo-icon">S</div>
+                <div>
+                    <h2>Serenoa</h2>
+                    <span class="brand-tag">Admin Panel</span>
+                </div>
+            </div>
+
+            <nav class="sidebar-nav">
+                <div class="nav-section-title">PRINCIPAL</div>
+                <a href="admin.html#dashboard" class="nav-item">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <rect x="3" y="3" width="7" height="9"></rect>
+                        <rect x="14" y="3" width="7" height="5"></rect>
+                        <rect x="14" y="12" width="7" height="9"></rect>
+                        <rect x="3" y="16" width="7" height="5"></rect>
+                    </svg>
+                    <span>Dashboard</span>
+                </a>
+
+                <div class="nav-section-title">GESTIÓN</div>
+                <a href="admin.html#catalogo" class="nav-item active">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+                        <line x1="3" y1="6" x2="21" y2="6"></line>
+                        <path d="M16 10a4 4 0 0 1-8 0"></path>
+                    </svg>
+                    <span>Catálogo de Postres</span>
+                </a>
+
+                <a href="admin.html#pedidos" class="nav-item">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                        <polyline points="10 9 9 9 8 9"></polyline>
+                    </svg>
+                    <span>Pedidos y Ventas</span>
+                </a>
+
+                <a href="admin.html#mensajes" class="nav-item">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                        <polyline points="22,6 12,13 2,6"></polyline>
+                    </svg>
+                    <span>Mensajes Clientes</span>
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="admin-user-card">
+                    <div class="user-avatar">AD</div>
+                    <div class="user-details">
+                        <strong>Administrador</strong>
+                        <span>admin@serenoa.ec</span>
+                    </div>
+                </div>
+                <button id="btn-logout" class="btn-logout" title="Cerrar sesión">
+                    <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                        <polyline points="16 17 21 12 16 7"></polyline>
+                        <line x1="21" y1="12" x2="9" y2="12"></line>
+                    </svg>
+                    <span>Cerrar Sesión</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- CONTENIDO PRINCIPAL -->
+        <div class="admin-main-wrapper product-page-bg">
+            <!-- TOPBAR -->
+            <header class="admin-topbar">
+                <div class="topbar-left">
+                    <div>
+                        <h1 id="topbar-section-title">Gestión de Producto</h1>
+                        <p class="topbar-subtitle">Catálogo de Pastelería Fina</p>
+                    </div>
+                </div>
+                <div class="topbar-right">
+                    <a href="admin.html#catalogo" class="btn-secondary btn-sm" title="Volver al catálogo">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <line x1="19" y1="12" x2="5" y2="12"></line>
+                            <polyline points="12 19 5 12 12 5"></polyline>
+                        </svg>
+                        <span>Ir al Catálogo</span>
+                    </a>
+                </div>
+            </header>
+
+            <main class="product-page-container">
+                
+                <!-- TARJETA PRINCIPAL DEL FORMULARIO CON DISEÑO SERENOA -->
+                <div class="product-form-card-box fade-in">
+                    
+                    <!-- ENCABEZADO DE LA TARJETA -->
+                    <div class="product-card-topbar">
+                        <div class="product-card-heading">
+                            <div class="product-heading-icon">
+                                <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                    <path d="M12 5v14M5 12h14"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <h1 id="page-title" class="product-main-title">Nuevo Producto</h1>
+                            </div>
+                        </div>
+                        <a href="admin.html#catalogo" class="btn-secondary btn-sm btn-pill-back">
+                            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <line x1="19" y1="12" x2="5" y2="12"></line>
+                                <polyline points="12 19 5 12 12 5"></polyline>
+                            </svg>
+                            <span>Volver al Catálogo</span>
+                        </a>
+                    </div>
+
+                    <!-- FORMULARIO EXCLUSIVO DE PRODUCTOS SERENOA -->
+                    <form id="product-page-form" class="product-form-body">
+                        <input type="hidden" id="prod-id">
+
+                        <!-- 1. NOMBRE DEL PRODUCTO / POSTRE -->
+                        <div class="form-field-group">
+                            <label for="prod-name" class="field-label-bold">Nombre del Postre <span class="field-required">*</span></label>
+                            <input type="text" id="prod-name" class="styled-input-rounded" placeholder="Ej: Tarta de Fresa Clásica y Pistacho" required autofocus>
+                        </div>
+
+                        <!-- 2. GRID DE 4 CAMPOS: CATEGORÍA, PRECIO, STOCK, ESTADO -->
+                        <div class="form-product-grid">
+                            <!-- Categoría -->
+                            <div class="form-field-group">
+                                <label for="prod-category" class="field-label-bold">Categoría <span class="field-required">*</span></label>
+                                <div class="styled-select-wrapper">
+                                    <select id="prod-category" class="styled-select-rounded" required>
+                                        <option value="Tartas">Tartas</option>
+                                        <option value="Cheesecakes">Cheesecakes</option>
+                                        <option value="Macarons">Macarons</option>
+                                        <option value="Postres Especiales">Postres Especiales</option>
+                                        <option value="__add_new_category__">+ Agregar nueva categoría</option>
+                                    </select>
+                                </div>
+                                
+                                <!-- Espacio dinámico para agregar nueva categoría (sin alertas emergentes) -->
+                                <div id="new-category-inline-box" class="new-category-box hidden">
+                                    <div class="new-category-input-row">
+                                        <input type="text" id="new-category-input" class="styled-input-rounded new-category-input" placeholder="Escribe la nueva categoría...">
+                                        <button type="button" id="btn-confirm-category" class="btn-category-confirm" title="Agregar categoría">
+                                            <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                                                <polyline points="20 6 9 17 4 12"></polyline>
+                                            </svg>
+                                        </button>
+                                        <button type="button" id="btn-cancel-category" class="btn-category-cancel" title="Cancelar">
+                                            ✕
+                                        </button>
+                                    </div>
+                                    <p id="new-category-msg" class="category-feedback-msg hidden"></p>
+                                </div>
+                            </div>
+
+                            <!-- Precio ($ USD) -->
+                            <div class="form-field-group">
+                                <label for="prod-price" class="field-label-bold">Precio ($ USD) <span class="field-required">*</span></label>
+                                <input type="number" id="prod-price" step="0.01" min="0.01" class="styled-input-rounded" placeholder="Ej: 16.50" required>
+                            </div>
+
+                            <!-- Stock disponible -->
+                            <div class="form-field-group">
+                                <label for="prod-stock" class="field-label-bold">Stock Disponible <span class="field-required">*</span></label>
+                                <input type="number" id="prod-stock" min="0" step="1" class="styled-input-rounded" placeholder="Ej: 12" required>
+                            </div>
+
+                            <!-- Estado (Disponible / Agotado / Oculto) -->
+                            <div class="form-field-group">
+                                <label for="prod-status" class="field-label-bold">Estado <span class="field-required">*</span></label>
+                                <div class="styled-select-wrapper">
+                                    <select id="prod-status" class="styled-select-rounded" required>
+                                        <option value="Disponible">Disponible</option>
+                                        <option value="Agotado">Agotado</option>
+                                        <option value="Oculto">Oculto</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 3. PREVISUALIZACIÓN EN VIVO DE IMAGEN (2 OPCIONES: ARCHIVO O URL) -->
+                        <div class="images-upload-card-box">
+                            <div class="images-box-title">
+                                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                    <polyline points="21 15 16 10 5 21"></polyline>
+                                </svg>
+                                <span>Imagen | Previsualización en Vivo</span>
+                            </div>
+
+                            <div class="image-options-container">
+                                <!-- OPCIÓN 1: Cargar desde el dispositivo -->
+                                <div class="upload-option-block">
+                                    <span class="option-subtitle">Opción 1: Cargar desde el dispositivo</span>
+                                    <div class="file-input-wrapper-styled">
+                                        <label for="prod-file-input" class="btn-choose-files-styled">
+                                            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                                <polyline points="17 8 12 3 7 8"></polyline>
+                                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                                            </svg>
+                                            <span>Cargar imagen</span>
+                                        </label>
+                                        <span id="file-chosen-text" class="file-chosen-label">Ningún archivo seleccionado</span>
+                                        <input type="file" id="prod-file-input" accept="image/*" class="real-file-input">
+                                    </div>
+                                </div>
+
+                                <!-- OPCIÓN 2: Pegar URL de la imagen -->
+                                <div class="upload-option-block url-block">
+                                    <span class="option-subtitle">Opción 2: Pegar enlace URL de la imagen</span>
+                                    <div class="url-input-with-label">
+                                        <input type="url" id="prod-image-url" class="styled-input-rounded url-inner-input" placeholder="https://images.unsplash.com/photo-...">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- PREVISUALIZACIÓN EN VIVO INSTANTÁNEA -->
+                            <div class="live-preview-section">
+                                <div class="preview-label-row">
+                                    <span class="preview-heading">Previsualización en Vivo:</span>
+                                    <span class="preview-hint">Se actualiza en tiempo real al ingresar la URL o subir una imagen</span>
+                                </div>
+                                <div id="live-preview-container" class="live-preview-box">
+                                    <div class="preview-thumbnail-card">
+                                        <img id="preview-img" src="https://images.unsplash.com/photo-1551024601-bec78aea704b?q=80&w=600&auto=format&fit=crop" alt="Vista previa del postre">
+                                        <div class="preview-badge-overlay">Vista Previa</div>
+                                        <button type="button" id="btn-clear-image" class="btn-clear-preview" title="Restablecer imagen por defecto">✕</button>
+                                    </div>
+                                    <div class="preview-meta-info">
+                                        <h4 id="preview-display-name">Tarta de Fresa Clásica</h4>
+                                        <p id="preview-display-cat">Categoría: Tartas</p>
+                                        <span id="preview-display-price" class="preview-gold-price">$15.00</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 4. DESCRIPCIÓN DETALLADA -->
+                        <div class="form-field-group">
+                            <label for="prod-desc" class="field-label-bold">Descripción Detallada <span class="field-required">*</span></label>
+                            <textarea id="prod-desc" rows="4" class="styled-textarea-rounded" placeholder="Describe la base crujiente, cremas infusionadas, origen de ingredientes selectos, perfil de sabor y notas de cata..." required></textarea>
+                        </div>
+
+                        <!-- 5. BOTONES DE ACCIÓN (DISEÑO SERENOA) -->
+                        <div class="form-submit-row">
+                            <button type="submit" id="btn-save-product" class="btn-save-action">
+                                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                    <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                    <polyline points="7 3 7 8 15 8"></polyline>
+                                </svg>
+                                <span id="btn-submit-text">Guardar Producto</span>
+                            </button>
+                            <a href="admin.html#catalogo" class="btn-cancel-action">
+                                Cancelar
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- SIDEBAR OVERLAY PARA MÓVIL -->
+    <div id="sidebar-overlay" class="sidebar-overlay"></div>
+
+    <!-- TOAST NOTIFICATION CONTAINER -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="js/nuevo_producto.js"></script>
+</body>
+</html>

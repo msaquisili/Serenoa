@@ -78,8 +78,10 @@ const DEFAULT_ORDERS = [
         productos: "1x Tarta de Fresa Clásica, 1x Caja Macarons",
         fecha: "2026-09-17 11:30",
         total: 27.00,
-        estado: "En preparación",
-        metodoPago: "Transferencia Bancaria"
+        estadoPago: "Pagado",
+        estadoLogistica: "Entregado",
+        estado: "Pagado",
+        metodoPago: "WhatsApp / Transferencia"
     },
     {
         id: "ORD-9020",
@@ -88,8 +90,10 @@ const DEFAULT_ORDERS = [
         productos: "2x Cheesecake New York",
         fecha: "2026-09-17 09:15",
         total: 36.00,
+        estadoPago: "Pendiente",
+        estadoLogistica: "Por preparar",
         estado: "Pendiente",
-        metodoPago: "Tarjeta de Crédito"
+        metodoPago: "Instagram / Reserva Directa"
     },
     {
         id: "ORD-9019",
@@ -98,8 +102,10 @@ const DEFAULT_ORDERS = [
         productos: "1x Tarta Selva Negra",
         fecha: "2026-09-16 16:45",
         total: 22.00,
-        estado: "Entregado",
-        metodoPago: "Efectivo"
+        estadoPago: "Pagado",
+        estadoLogistica: "Entregado",
+        estado: "Pagado",
+        metodoPago: "Efectivo al Retiro"
     },
     {
         id: "ORD-9018",
@@ -108,7 +114,9 @@ const DEFAULT_ORDERS = [
         productos: "2x Caja de Macarons, 2x Éclair",
         fecha: "2026-09-16 14:10",
         total: 37.00,
-        estado: "Entregado",
+        estadoPago: "Pagado",
+        estadoLogistica: "Entregado",
+        estado: "Pagado",
         metodoPago: "Transferencia Bancaria"
     },
     {
@@ -118,8 +126,10 @@ const DEFAULT_ORDERS = [
         productos: "1x Tiramisú, 1x Tarta de Fresa",
         fecha: "2026-09-15 18:20",
         total: 23.50,
-        estado: "Entregado",
-        metodoPago: "Tarjeta de Crédito"
+        estadoPago: "Pendiente",
+        estadoLogistica: "Por preparar",
+        estado: "Pendiente",
+        metodoPago: "Instagram / WhatsApp"
     },
     {
         id: "ORD-9016",
@@ -128,6 +138,8 @@ const DEFAULT_ORDERS = [
         productos: "1x Tarta Selva Negra",
         fecha: "2026-09-15 12:05",
         total: 22.00,
+        estadoPago: "Cancelado",
+        estadoLogistica: "Por preparar",
         estado: "Cancelado",
         metodoPago: "Efectivo"
     }
@@ -258,131 +270,358 @@ let products = getStoredData("products", DEFAULT_PRODUCTS);
 let orders = getStoredData("orders", DEFAULT_ORDERS);
 let messages = getStoredData("messages", DEFAULT_MESSAGES);
 
+// Normalización y migración retrocompatible de pedidos existentes en localStorage
+let ordersNeedMigration = false;
+orders = orders.map(o => {
+    let changed = false;
+    let estadoPago = o.estadoPago;
+    let estadoLogistica = o.estadoLogistica;
+
+    if (!estadoPago) {
+        const legacySt = (o.estado || "").toLowerCase().trim();
+        if (legacySt === "pagado" || legacySt === "entregado" || legacySt === "en preparación" || legacySt === "en preparacion" || legacySt === "confirmado") {
+            estadoPago = "Pagado";
+        } else if (legacySt === "cancelado") {
+            estadoPago = "Cancelado";
+        } else {
+            estadoPago = "Pendiente";
+        }
+        changed = true;
+    }
+
+    if (!estadoLogistica) {
+        const legacySt = (o.estado || "").toLowerCase().trim();
+        if (legacySt === "entregado") {
+            estadoLogistica = "Entregado";
+        } else if (legacySt === "en preparación" || legacySt === "en preparacion") {
+            estadoLogistica = "En preparación";
+        } else if (estadoPago === "Pagado") {
+            // Asignar por defecto a entregado para pedidos pagados del histórico
+            estadoLogistica = "Entregado";
+        } else {
+            estadoLogistica = "Por preparar";
+        }
+        changed = true;
+    }
+
+    if (changed || o.estadoPago !== estadoPago || o.estadoLogistica !== estadoLogistica) {
+        ordersNeedMigration = true;
+        return {
+            ...o,
+            estadoPago,
+            estadoLogistica,
+            estado: estadoPago
+        };
+    }
+    return o;
+});
+
 if (!localStorage.getItem("serenoa_products")) setStoredData("products", products);
-if (!localStorage.getItem("serenoa_orders")) setStoredData("orders", orders);
+if (!localStorage.getItem("serenoa_orders") || ordersNeedMigration) setStoredData("orders", orders);
 if (!localStorage.getItem("serenoa_messages")) setStoredData("messages", messages);
 
 // ==========================================================================
-// 3. CONTROLADORES DE GRÁFICOS (CHART.JS)
+// 3. CONTROLADORES DE MÉTRICAS & GRÁFICOS OPERATIVOS
 // ==========================================================================
 
-let revenueChartInstance = null;
 let categoriesChartInstance = null;
 let topProductsChartInstance = null;
 
-const initCharts = (period = "month") => {
-    const data = ANALYTICS_DATA[period] || ANALYTICS_DATA.month;
+/**
+ * Colores institucionales Serenoa para distribución dinámica de categorías
+ */
+const PALETTE_COLORS = [
+    "#1A3628", "#A87E50", "#C49F6A", "#2A9D8F", "#8C2D2D",
+    "#4A6B5B", "#E76F51", "#264653", "#E9C46A", "#DDA15E", "#6D597A"
+];
 
-    // Actualizar KPI Cards
-    const kpiRev = document.getElementById("kpi-revenue");
-    const kpiOrd = document.getElementById("kpi-orders");
-    const kpiAvg = document.getElementById("kpi-avg-ticket");
-    const kpiPending = document.getElementById("kpi-pending-orders");
+/**
+ * Normaliza cadenas de texto eliminando tildes y caracteres especiales
+ */
+const normalizeText = (str) => {
+    return (str || "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9\s]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+};
 
-    if (kpiRev) kpiRev.textContent = `$${data.revenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    if (kpiOrd) kpiOrd.textContent = data.orders.toLocaleString();
-    if (kpiAvg) kpiAvg.textContent = `$${data.avgTicket.toFixed(2)}`;
-    
-    // Contar pendientes reales desde la lista de órdenes
-    const actualPending = orders.filter(o => o.estado === "Pendiente" || o.estado === "En preparación").length;
-    if (kpiPending) kpiPending.textContent = actualPending.toString();
+/**
+ * Busca un producto en el catálogo con coincidencia flexible por nombre o palabras clave
+ */
+const findProductMatch = (itemName, catalog) => {
+    const cleanItem = normalizeText(itemName);
+    if (!cleanItem) return null;
 
-    // 1. Gráfico de Ingresos y Ganancias
-    const ctxRevenue = document.getElementById("chart-revenue-sales");
-    if (ctxRevenue) {
-        if (revenueChartInstance) revenueChartInstance.destroy();
-
-        const ctx = ctxRevenue.getContext("2d");
-        const gradientRevenue = ctx.createLinearGradient(0, 0, 0, 300);
-        gradientRevenue.addColorStop(0, "rgba(26, 54, 40, 0.25)");
-        gradientRevenue.addColorStop(1, "rgba(26, 54, 40, 0.0)");
-
-        const gradientProfit = ctx.createLinearGradient(0, 0, 0, 300);
-        gradientProfit.addColorStop(0, "rgba(168, 126, 80, 0.25)");
-        gradientProfit.addColorStop(1, "rgba(168, 126, 80, 0.0)");
-
-        revenueChartInstance = new Chart(ctxRevenue, {
-            type: "line",
-            data: {
-                labels: data.labels,
-                datasets: [
-                    {
-                        label: "Ingresos Totales ($)",
-                        data: data.revenueSeries,
-                        borderColor: "#1A3628",
-                        backgroundColor: gradientRevenue,
-                        borderWidth: 3,
-                        fill: true,
-                        tension: 0.35,
-                        pointBackgroundColor: "#1A3628",
-                        pointRadius: 4,
-                        pointHoverRadius: 6
-                    },
-                    {
-                        label: "Ganancia Neta ($)",
-                        data: data.profitSeries,
-                        borderColor: "#A87E50",
-                        backgroundColor: gradientProfit,
-                        borderWidth: 2.5,
-                        borderDash: [4, 4],
-                        fill: true,
-                        tension: 0.35,
-                        pointBackgroundColor: "#A87E50",
-                        pointRadius: 4,
-                        pointHoverRadius: 6
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        backgroundColor: "#1A3628",
-                        titleFont: { family: "Plus Jakarta Sans", size: 13 },
-                        bodyFont: { family: "Plus Jakarta Sans", size: 12 },
-                        padding: 10,
-                        callbacks: {
-                            label: (context) => `${context.dataset.label}: $${context.parsed.y.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
-                        }
-                    }
-                },
-                scales: {
-                    x: {
-                        grid: { display: false },
-                        ticks: { font: { family: "Plus Jakarta Sans", size: 11 }, color: "#666" }
-                    },
-                    y: {
-                        grid: { color: "rgba(0,0,0,0.05)" },
-                        ticks: {
-                            font: { family: "Plus Jakarta Sans", size: 11 },
-                            color: "#666",
-                            callback: (val) => `$${val}`
-                        }
-                    }
-                }
-            }
-        });
+    // 1. Coincidencia exacta limpia
+    for (const p of catalog) {
+        const cleanProd = normalizeText(p.nombre);
+        if (cleanProd === cleanItem) return p;
     }
 
-    // 2. Gráfico Donut de Categorías
+    // 2. Coincidencia de subcadena
+    for (const p of catalog) {
+        const cleanProd = normalizeText(p.nombre);
+        if (cleanProd.includes(cleanItem) || cleanItem.includes(cleanProd)) return p;
+    }
+
+    // 3. Coincidencia por palabras clave representativas
+    const itemWords = cleanItem.split(" ").filter(w => w.length > 2);
+    for (const p of catalog) {
+        const cleanProd = normalizeText(p.nombre);
+        const prodWords = cleanProd.split(" ").filter(w => w.length > 2);
+        const hasOverlap = itemWords.some(w => prodWords.includes(w) || cleanProd.includes(w));
+        if (hasOverlap) return p;
+    }
+
+    return null;
+};
+
+/**
+ * Actualiza las métricas principales del Dashboard:
+ * - Ingresos Totales: Solo suma pedidos cuyo Estado de Pago sea "Pagado" o "Confirmado".
+ * - Número de Ventas: Conteo de pedidos pagados/confirmados.
+ * - Pedidos Pendientes: Conteo de reservas cuyo Estado de Pago sea "Pendiente".
+ */
+const updateDashboardMetrics = () => {
+    const paidOrders = orders.filter(o => {
+        const st = (o.estadoPago || o.estado || "").toLowerCase().trim();
+        return st === "pagado" || st === "confirmado";
+    });
+
+    const totalRevenue = paidOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+    const totalSales = paidOrders.length;
+    
+    const pendingOrders = orders.filter(o => {
+        const st = (o.estadoPago || o.estado || "").toLowerCase().trim();
+        return st === "pendiente" || st === "reservado";
+    });
+
+    const kpiRev = document.getElementById("kpi-revenue");
+    const kpiOrd = document.getElementById("kpi-orders");
+    const kpiPending = document.getElementById("kpi-pending-orders");
+
+    if (kpiRev) kpiRev.textContent = `$${totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    if (kpiOrd) kpiOrd.textContent = totalSales.toString();
+    if (kpiPending) kpiPending.textContent = pendingOrders.length.toString();
+};
+
+/**
+ * Calcula las métricas de inventario (Top 5 postres y Ventas por Categoría)
+ * Condición estricta: Solo pedidos donde Estado de Pago sea "Pagado" Y Estado de Logística sea "Entregado".
+ */
+const calculateInventoryAnalytics = () => {
+    const qualifyingOrders = orders.filter(o => {
+        const pago = (o.estadoPago || "").toLowerCase().trim();
+        const logistica = (o.estadoLogistica || "").toLowerCase().trim();
+        const isPaid = pago === "pagado" || pago === "confirmado";
+        const isDelivered = logistica === "entregado";
+        return isPaid && isDelivered;
+    });
+
+    const productSalesMap = {};
+    const categorySalesMap = {};
+
+    // Obtener dinámicamente todas las categorías existentes del sistema
+    const storedCats = getStoredData("categories", ["Tartas", "Cheesecakes", "Macarons", "Postres Especiales"]);
+    const allCategories = Array.from(new Set([...storedCats, ...products.map(p => p.categoria).filter(Boolean)]));
+    allCategories.forEach(cat => {
+        categorySalesMap[cat] = 0;
+    });
+
+    qualifyingOrders.forEach(order => {
+        if (!order.productos) return;
+        const items = order.productos.split(",");
+        items.forEach(rawItem => {
+            const trimmed = rawItem.trim();
+            if (!trimmed) return;
+            const match = trimmed.match(/^(\d+)\s*x\s*(.+)$/i);
+            const qty = match ? parseInt(match[1], 10) : 1;
+            const itemName = match ? match[2].trim() : trimmed;
+
+            // Asociar con el producto del catálogo para conocer su categoría exacta
+            const foundProduct = findProductMatch(itemName, products);
+
+            const productName = foundProduct ? foundProduct.nombre : itemName;
+            const categoryName = foundProduct ? foundProduct.categoria : (allCategories[0] || "Postres Especiales");
+
+            productSalesMap[productName] = (productSalesMap[productName] || 0) + qty;
+            if (categorySalesMap[categoryName] !== undefined) {
+                categorySalesMap[categoryName] += qty;
+            } else {
+                categorySalesMap[categoryName] = qty;
+                if (!allCategories.includes(categoryName)) allCategories.push(categoryName);
+            }
+        });
+    });
+
+    // Top 5 Productos más vendidos
+    let sortedProducts = Object.keys(productSalesMap)
+        .map(name => ({ name, sales: productSalesMap[name] }))
+        .sort((a, b) => b.sales - a.sales)
+        .slice(0, 5);
+
+    // Si hay menos de 5 con ventas registradas, completar con postres del catálogo
+    if (sortedProducts.length < 5) {
+        const existingNames = new Set(sortedProducts.map(p => p.name));
+        for (const p of products) {
+            if (sortedProducts.length >= 5) break;
+            if (!existingNames.has(p.nombre)) {
+                sortedProducts.push({ name: p.nombre, sales: 0 });
+                existingNames.add(p.nombre);
+            }
+        }
+    }
+
+    return {
+        topProducts: sortedProducts,
+        categorySales: categorySalesMap,
+        allCategories
+    };
+};
+
+const getPaymentStatusClass = (estado) => {
+    const st = (estado || "").toLowerCase().trim();
+    if (st === "pagado" || st === "confirmado") return "pagado";
+    if (st === "cancelado") return "cancelado";
+    return "pendiente";
+};
+
+const getLogisticsStatusClass = (estado) => {
+    const st = (estado || "").toLowerCase().trim();
+    if (st === "entregado") return "entregado";
+    if (st === "en preparación" || st === "en preparacion") return "en-preparacion";
+    return "pendiente";
+};
+
+const renderDashboardOrdersTable = () => {
+    const tbody = document.getElementById("dashboard-orders-table-body");
+    if (!tbody) return;
+
+    if (orders.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="7" style="text-align:center; padding: 2.5rem; color: var(--text-light);">
+                    No hay reservas ni pedidos registrados por el momento.
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    tbody.innerHTML = orders.map(o => {
+        const estadoPago = o.estadoPago || "Pendiente";
+        const estadoLogistica = o.estadoLogistica || "Por preparar";
+
+        return `
+        <tr>
+            <td><strong style="color:var(--dark-green);">${o.id}</strong></td>
+            <td>
+                <div>
+                    <strong>${o.cliente}</strong>
+                    <span style="font-size:0.75rem; color:var(--text-light); display:block;">
+                        ${o.email || o.metodoPago || 'WhatsApp / Direct'}
+                    </span>
+                </div>
+            </td>
+            <td><span style="font-size:0.85rem; color:var(--text-dark);">${o.productos}</span></td>
+            <td><span style="font-size:0.8rem; color:var(--text-light);">${o.fecha}</span></td>
+            <td><strong style="color:var(--dark-green); font-size:0.95rem;">$${Number(o.total).toFixed(2)}</strong></td>
+            <td>
+                <div class="status-cell-flex">
+                    <span class="badge-status ${getPaymentStatusClass(estadoPago)}">${estadoPago}</span>
+                    <select class="status-quick-select select-payment-status" data-id="${o.id}" title="Cambiar Estado de Pago">
+                        <option value="Pendiente" ${estadoPago === 'Pendiente' ? 'selected' : ''}>Pendiente</option>
+                        <option value="Pagado" ${estadoPago === 'Pagado' ? 'selected' : ''}>Pagado</option>
+                        <option value="Cancelado" ${estadoPago === 'Cancelado' ? 'selected' : ''}>Cancelado</option>
+                    </select>
+                </div>
+            </td>
+            <td>
+                <div class="status-cell-flex">
+                    <span class="badge-status ${getLogisticsStatusClass(estadoLogistica)}">${estadoLogistica}</span>
+                    <select class="status-quick-select select-logistics-status" data-id="${o.id}" title="Cambiar Estado de Logística">
+                        <option value="Por preparar" ${estadoLogistica === 'Por preparar' ? 'selected' : ''}>Por preparar</option>
+                        <option value="En preparación" ${estadoLogistica === 'En preparación' ? 'selected' : ''}>En preparación</option>
+                        <option value="Entregado" ${estadoLogistica === 'Entregado' ? 'selected' : ''}>Entregado</option>
+                    </select>
+                </div>
+            </td>
+        </tr>
+        `;
+    }).join("");
+
+    // Conectar cambios de Estado de Pago
+    tbody.querySelectorAll(".select-payment-status").forEach(select => {
+        select.addEventListener("change", (e) => {
+            const orderId = select.dataset.id;
+            const newPaymentStatus = e.target.value;
+            const order = orders.find(ord => ord.id === orderId);
+            if (order) {
+                order.estadoPago = newPaymentStatus;
+                order.estado = newPaymentStatus;
+                if (!order.estadoLogistica) order.estadoLogistica = "Por preparar";
+                setStoredData("orders", orders);
+                updateDashboardMetrics();
+                initCharts();
+                renderDashboardOrdersTable();
+                renderOrdersTable();
+                showToast(`Pago de ${orderId} actualizado a "${newPaymentStatus}".`);
+            }
+        });
+    });
+
+    // Conectar cambios de Estado de Logística
+    tbody.querySelectorAll(".select-logistics-status").forEach(select => {
+        select.addEventListener("change", (e) => {
+            const orderId = select.dataset.id;
+            const newLogisticsStatus = e.target.value;
+            const order = orders.find(ord => ord.id === orderId);
+            if (order) {
+                order.estadoLogistica = newLogisticsStatus;
+                if (!order.estadoPago) order.estadoPago = "Pendiente";
+                setStoredData("orders", orders);
+                initCharts();
+                renderDashboardOrdersTable();
+                renderOrdersTable();
+                showToast(`Logística de ${orderId} actualizada a "${newLogisticsStatus}".`);
+            }
+        });
+    });
+};
+
+const initCharts = (period = "month") => {
+    // 1. Actualizar Métricas Operativas en Vivo
+    updateDashboardMetrics();
+
+    // 2. Calcular analíticas de inventario estrictas (Pagado Y Entregado)
+    const { topProducts, categorySales, allCategories } = calculateInventoryAnalytics();
+
+    // 3. Gráfico Donut Dinámico de Todas las Categorías
     const ctxCat = document.getElementById("chart-categories");
     if (ctxCat) {
-        if (categoriesChartInstance) categoriesChartInstance.destroy();
+        if (categoriesChartInstance) {
+            categoriesChartInstance.destroy();
+            categoriesChartInstance = null;
+        }
+
+        const categoryData = allCategories.map(cat => categorySales[cat] || 0);
+        const totalDeliveredUnits = categoryData.reduce((acc, v) => acc + v, 0);
+        const bgColors = allCategories.map((_, idx) => PALETTE_COLORS[idx % PALETTE_COLORS.length]);
+
+        // Si no hay ventas entregadas todavía, mostrar gráfico con fondo suave
+        const displayData = totalDeliveredUnits > 0 ? categoryData : allCategories.map(() => 1);
+        const displayBg = totalDeliveredUnits > 0 ? bgColors : allCategories.map(() => "rgba(220, 220, 220, 0.45)");
 
         categoriesChartInstance = new Chart(ctxCat, {
             type: "doughnut",
             data: {
-                labels: ["Tartas", "Cheesecakes", "Macarons", "Especiales"],
+                labels: allCategories,
                 datasets: [{
-                    data: [
-                        data.categories.Tartas,
-                        data.categories.Cheesecakes,
-                        data.categories.Macarons,
-                        data.categories.PostresEspeciales
-                    ],
-                    backgroundColor: ["#1A3628", "#A87E50", "#C49F6A", "#333333"],
+                    data: displayData,
+                    backgroundColor: displayBg,
                     borderWidth: 3,
                     borderColor: "#FFFFFF"
                 }]
@@ -401,7 +640,10 @@ const initCharts = (period = "month") => {
                     },
                     tooltip: {
                         callbacks: {
-                            label: (context) => ` ${context.label}: ${context.raw}% de ventas`
+                            label: (context) => {
+                                const realVal = totalDeliveredUnits > 0 ? context.raw : 0;
+                                return ` ${context.label}: ${realVal} un. entregadas`;
+                            }
                         }
                     }
                 },
@@ -410,18 +652,21 @@ const initCharts = (period = "month") => {
         });
     }
 
-    // 3. Gráfico de Barras: Top 5 Productos
+    // 4. Gráfico de Barras: Top 5 Productos Más Vendidos & Entregados
     const ctxTop = document.getElementById("chart-top-products");
     if (ctxTop) {
-        if (topProductsChartInstance) topProductsChartInstance.destroy();
+        if (topProductsChartInstance) {
+            topProductsChartInstance.destroy();
+            topProductsChartInstance = null;
+        }
 
         topProductsChartInstance = new Chart(ctxTop, {
             type: "bar",
             data: {
-                labels: data.topProducts.map(p => p.name),
+                labels: topProducts.map(p => p.name),
                 datasets: [{
-                    label: "Unidades Vendidas",
-                    data: data.topProducts.map(p => p.sales),
+                    label: "Unidades Pagadas y Entregadas",
+                    data: topProducts.map(p => p.sales),
                     backgroundColor: "rgba(26, 54, 40, 0.85)",
                     borderRadius: 8,
                     hoverBackgroundColor: "#A87E50"
@@ -432,12 +677,18 @@ const initCharts = (period = "month") => {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: { display: false }
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: (context) => ` ${context.parsed.x} unidades entregadas`
+                        }
+                    }
                 },
                 scales: {
                     x: {
+                        beginAtZero: true,
                         grid: { color: "rgba(0,0,0,0.05)" },
-                        ticks: { font: { family: "Plus Jakarta Sans" } }
+                        ticks: { font: { family: "Plus Jakarta Sans" }, precision: 0 }
                     },
                     y: {
                         grid: { display: false },
@@ -448,44 +699,36 @@ const initCharts = (period = "month") => {
         });
     }
 
-    // Renderizar lista mini de órdenes en el Dashboard
-    renderMiniOrders();
-};
-
-const renderMiniOrders = () => {
-    const miniContainer = document.getElementById("mini-orders-list");
-    if (!miniContainer) return;
-
-    const recent = orders.slice(0, 4);
-    miniContainer.innerHTML = recent.map(o => `
-        <div class="mini-order-row">
-            <div class="mini-order-info">
-                <strong>${o.cliente} <span style="color:var(--text-light); font-weight:normal; font-size:0.75rem;">(${o.id})</span></strong>
-                <span>${o.productos}</span>
-            </div>
-            <div class="mini-order-meta">
-                <span class="price">$${Number(o.total).toFixed(2)}</span>
-                <span class="badge-status ${getStatusClass(o.estado)}">${o.estado}</span>
-            </div>
-        </div>
-    `).join("");
+    // 5. Renderizar tabla de control operativo en el Dashboard
+    renderDashboardOrdersTable();
 };
 
 const getStatusClass = (estado) => {
-    switch (estado.toLowerCase()) {
-        case "entregado": return "entregado";
-        case "en preparación": return "en-preparacion";
-        case "pendiente": return "pendiente";
-        case "cancelado": return "cancelado";
-        default: return "pendiente";
-    }
+    const st = (estado || "").toLowerCase().trim();
+    if (st === "entregado" || st === "pagado" || st === "confirmado") return "pagado";
+    if (st === "en preparación" || st === "en preparacion") return "en-preparacion";
+    if (st === "cancelado") return "cancelado";
+    return "pendiente";
 };
 
 // ==========================================================================
 // 4. GESTIÓN DE CATÁLOGO (CRUD DE PRODUCTOS)
 // ==========================================================================
 
+const updateAdminCategoryFilter = () => {
+    const catSelect = document.getElementById("catalog-filter-category");
+    if (!catSelect) return;
+    const currentVal = catSelect.value || "all";
+    const storedCats = getStoredData("categories", ["Tartas", "Cheesecakes", "Macarons", "Postres Especiales"]);
+    
+    const allCats = Array.from(new Set([...storedCats, ...products.map(p => p.categoria).filter(Boolean)]));
+
+    catSelect.innerHTML = `<option value="all">Todas las categorías</option>` + 
+        allCats.map(c => `<option value="${c}" ${c === currentVal ? 'selected' : ''}>${c}</option>`).join('');
+};
+
 const renderCatalogTable = () => {
+    updateAdminCategoryFilter();
     const tbody = document.getElementById("catalog-table-body");
     const searchVal = document.getElementById("catalog-search")?.value.toLowerCase().trim() || "";
     const catVal = document.getElementById("catalog-filter-category")?.value || "all";
@@ -536,12 +779,12 @@ const renderCatalogTable = () => {
             </td>
             <td>
                 <div class="table-actions">
-                    <button class="btn-icon btn-edit-product" data-id="${p.id}" title="Editar postre">
+                    <a href="nuevo_producto.html?id=${p.id}" class="btn-icon btn-edit-product" title="Editar postre">
                         <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                         </svg>
-                    </button>
+                    </a>
                     <button class="btn-icon btn-delete btn-delete-product" data-id="${p.id}" title="Eliminar postre">
                         <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                             <polyline points="3 6 5 6 21 6"></polyline>
@@ -553,88 +796,10 @@ const renderCatalogTable = () => {
         </tr>
     `).join("");
 
-    // Conectar eventos de botones de acción
-    document.querySelectorAll(".btn-edit-product").forEach(btn => {
-        btn.addEventListener("click", () => openProductModal(btn.dataset.id));
-    });
-
+    // Conectar eventos para eliminar productos
     document.querySelectorAll(".btn-delete-product").forEach(btn => {
         btn.addEventListener("click", () => deleteProduct(btn.dataset.id));
     });
-};
-
-const openProductModal = (id = null) => {
-    const modal = document.getElementById("modal-product");
-    const form = document.getElementById("product-form");
-    const modalTitle = document.getElementById("modal-product-title");
-
-    form.reset();
-    document.getElementById("prod-id").value = "";
-
-    if (id) {
-        const prod = products.find(p => p.id === id);
-        if (prod) {
-            modalTitle.textContent = "Editar Producto";
-            document.getElementById("prod-id").value = prod.id;
-            document.getElementById("prod-name").value = prod.nombre;
-            document.getElementById("prod-category").value = prod.categoria;
-            document.getElementById("prod-price").value = prod.precio;
-            document.getElementById("prod-stock").value = prod.stock;
-            document.getElementById("prod-image").value = prod.imagen || "";
-            document.getElementById("prod-desc").value = prod.desc || "";
-        }
-    } else {
-        modalTitle.textContent = "Nuevo Producto";
-    }
-
-    modal.classList.remove("hidden");
-};
-
-const closeProductModal = () => {
-    document.getElementById("modal-product")?.classList.add("hidden");
-};
-
-const saveProduct = (e) => {
-    e.preventDefault();
-    const id = document.getElementById("prod-id").value;
-    const nombre = document.getElementById("prod-name").value.trim();
-    const categoria = document.getElementById("prod-category").value;
-    const precio = parseFloat(document.getElementById("prod-price").value) || 0;
-    const stock = parseInt(document.getElementById("prod-stock").value, 10) || 0;
-    const imagen = document.getElementById("prod-image").value.trim() || "https://images.unsplash.com/photo-1551024601-bec78aea704b?q=80&w=400";
-    const desc = document.getElementById("prod-desc").value.trim();
-
-    if (!nombre || precio <= 0) {
-        showToast("Por favor completa los campos obligatorios.", "error");
-        return;
-    }
-
-    if (id) {
-        // Editar existente
-        const index = products.findIndex(p => p.id === id);
-        if (index !== -1) {
-            products[index] = { ...products[index], nombre, categoria, precio, stock, imagen, desc, activo: stock > 0 };
-            showToast(`Producto "${nombre}" actualizado correctamente.`);
-        }
-    } else {
-        // Crear nuevo
-        const newProduct = {
-            id: `prod-${Date.now()}`,
-            nombre,
-            categoria,
-            precio,
-            stock,
-            imagen,
-            desc,
-            activo: stock > 0
-        };
-        products.unshift(newProduct);
-        showToast(`Producto "${nombre}" añadido al catálogo.`);
-    }
-
-    setStoredData("products", products);
-    closeProductModal();
-    renderCatalogTable();
 };
 
 const deleteProduct = (id) => {
@@ -645,6 +810,7 @@ const deleteProduct = (id) => {
         products = products.filter(p => p.id !== id);
         setStoredData("products", products);
         renderCatalogTable();
+        initCharts();
         showToast(`Producto "${prod.nombre}" eliminado.`, "error");
     }
 };
@@ -659,14 +825,19 @@ const renderOrdersTable = () => {
     const statusVal = document.getElementById("orders-filter-status")?.value || "all";
     const badgeOrders = document.getElementById("badge-orders-count");
 
-    const pendingCount = orders.filter(o => o.estado === "Pendiente" || o.estado === "En preparación").length;
+    const pendingCount = orders.filter(o => {
+        const st = (o.estadoPago || o.estado || "").toLowerCase().trim();
+        return st === "pendiente" || st === "reservado";
+    }).length;
+
     if (badgeOrders) badgeOrders.textContent = pendingCount.toString();
 
     if (!tbody) return;
 
     const filtered = orders.filter(o => {
-        const matchesSearch = o.id.toLowerCase().includes(searchVal) || o.cliente.toLowerCase().includes(searchVal) || o.productos.toLowerCase().includes(searchVal);
-        const matchesStatus = statusVal === "all" || o.estado === statusVal;
+        const matchesSearch = o.id.toLowerCase().includes(searchVal) || o.cliente.toLowerCase().includes(searchVal) || (o.productos && o.productos.toLowerCase().includes(searchVal));
+        const paymentSt = o.estadoPago || o.estado || "Pendiente";
+        const matchesStatus = statusVal === "all" || paymentSt === statusVal;
         return matchesSearch && matchesStatus;
     });
 
@@ -681,43 +852,78 @@ const renderOrdersTable = () => {
         return;
     }
 
-    tbody.innerHTML = filtered.map(o => `
+    tbody.innerHTML = filtered.map(o => {
+        const estadoPago = o.estadoPago || (o.estado === "Pagado" ? "Pagado" : (o.estado === "Cancelado" ? "Cancelado" : "Pendiente"));
+        const estadoLogistica = o.estadoLogistica || (o.estado === "Entregado" ? "Entregado" : (o.estado === "En preparación" ? "En preparación" : "Por preparar"));
+
+        return `
         <tr>
-            <td><strong>${o.id}</strong></td>
+            <td><strong style="color:var(--dark-green);">${o.id}</strong></td>
             <td>
                 <div>
                     <strong>${o.cliente}</strong>
-                    <span style="font-size:0.75rem; color:var(--text-light); display:block;">${o.email || o.metodoPago}</span>
+                    <span style="font-size:0.75rem; color:var(--text-light); display:block;">${o.email || o.metodoPago || 'WhatsApp / Direct'}</span>
                 </div>
             </td>
             <td><span style="font-size:0.85rem;">${o.productos}</span></td>
             <td><span style="font-size:0.8rem; color:var(--text-light);">${o.fecha}</span></td>
-            <td><strong>$${Number(o.total).toFixed(2)}</strong></td>
+            <td><strong style="color:var(--dark-green); font-size:0.95rem;">$${Number(o.total).toFixed(2)}</strong></td>
             <td>
-                <span class="badge-status ${getStatusClass(o.estado)}">${o.estado}</span>
+                <div class="status-cell-flex">
+                    <span class="badge-status ${getPaymentStatusClass(estadoPago)}">${estadoPago}</span>
+                    <select class="status-select-table select-payment-table" data-id="${o.id}">
+                        <option value="Pendiente" ${estadoPago === 'Pendiente' ? 'selected' : ''}>Pendiente</option>
+                        <option value="Pagado" ${estadoPago === 'Pagado' ? 'selected' : ''}>Pagado</option>
+                        <option value="Cancelado" ${estadoPago === 'Cancelado' ? 'selected' : ''}>Cancelado</option>
+                    </select>
+                </div>
             </td>
             <td>
-                <select class="status-select-table" data-id="${o.id}">
-                    <option value="Pendiente" ${o.estado === 'Pendiente' ? 'selected' : ''}>Pendiente</option>
-                    <option value="En preparación" ${o.estado === 'En preparación' ? 'selected' : ''}>En preparación</option>
-                    <option value="Entregado" ${o.estado === 'Entregado' ? 'selected' : ''}>Entregado</option>
-                    <option value="Cancelado" ${o.estado === 'Cancelado' ? 'selected' : ''}>Cancelado</option>
-                </select>
+                <div class="status-cell-flex">
+                    <span class="badge-status ${getLogisticsStatusClass(estadoLogistica)}">${estadoLogistica}</span>
+                    <select class="status-select-table select-logistics-table" data-id="${o.id}">
+                        <option value="Por preparar" ${estadoLogistica === 'Por preparar' ? 'selected' : ''}>Por preparar</option>
+                        <option value="En preparación" ${estadoLogistica === 'En preparación' ? 'selected' : ''}>En preparación</option>
+                        <option value="Entregado" ${estadoLogistica === 'Entregado' ? 'selected' : ''}>Entregado</option>
+                    </select>
+                </div>
             </td>
         </tr>
-    `).join("");
+        `;
+    }).join("");
 
-    document.querySelectorAll(".status-select-table").forEach(select => {
+    tbody.querySelectorAll(".select-payment-table").forEach(select => {
         select.addEventListener("change", (e) => {
             const orderId = select.dataset.id;
-            const newStatus = e.target.value;
+            const newPaymentStatus = e.target.value;
             const order = orders.find(o => o.id === orderId);
             if (order) {
-                order.estado = newStatus;
+                order.estadoPago = newPaymentStatus;
+                order.estado = newPaymentStatus;
+                if (!order.estadoLogistica) order.estadoLogistica = "Por preparar";
                 setStoredData("orders", orders);
+                updateDashboardMetrics();
+                initCharts();
+                renderDashboardOrdersTable();
                 renderOrdersTable();
-                renderMiniOrders();
-                showToast(`Pedido ${orderId} actualizado a "${newStatus}".`);
+                showToast(`Pago de ${orderId} actualizado a "${newPaymentStatus}".`);
+            }
+        });
+    });
+
+    tbody.querySelectorAll(".select-logistics-table").forEach(select => {
+        select.addEventListener("change", (e) => {
+            const orderId = select.dataset.id;
+            const newLogisticsStatus = e.target.value;
+            const order = orders.find(o => o.id === orderId);
+            if (order) {
+                order.estadoLogistica = newLogisticsStatus;
+                if (!order.estadoPago) order.estadoPago = "Pendiente";
+                setStoredData("orders", orders);
+                initCharts();
+                renderDashboardOrdersTable();
+                renderOrdersTable();
+                showToast(`Logística de ${orderId} actualizada a "${newLogisticsStatus}".`);
             }
         });
     });
@@ -902,6 +1108,41 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Control del Menú Hamburguesa (Contraer / Esconder Sidebar)
+    const initSidebarToggle = () => {
+        const btnToggle = document.getElementById('btn-sidebar-toggle');
+        const overlay = document.getElementById('sidebar-overlay');
+        
+        // Restaurar estado guardado en localStorage
+        const isCollapsed = localStorage.getItem('sidebar_collapsed') === 'true';
+        if (isCollapsed && window.innerWidth > 992) {
+            document.body.classList.add('sidebar-collapsed');
+        }
+
+        btnToggle?.addEventListener('click', () => {
+            if (window.innerWidth <= 992) {
+                document.body.classList.toggle('sidebar-open-mobile');
+            } else {
+                document.body.classList.toggle('sidebar-collapsed');
+                const collapsedNow = document.body.classList.contains('sidebar-collapsed');
+                localStorage.setItem('sidebar_collapsed', collapsedNow);
+            }
+        });
+
+        overlay?.addEventListener('click', () => {
+            document.body.classList.remove('sidebar-open-mobile');
+        });
+
+        // Cerrar menú en móvil al hacer clic en un enlace del sidebar
+        document.querySelectorAll('.sidebar-nav .nav-item').forEach(item => {
+            item.addEventListener('click', () => {
+                if (window.innerWidth <= 992) {
+                    document.body.classList.remove('sidebar-open-mobile');
+                }
+            });
+        });
+    };
+
     // Navegación de pestañas en Sidebar
     document.querySelectorAll('.sidebar-nav .nav-item').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -937,12 +1178,6 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById("catalog-search")?.addEventListener("input", renderCatalogTable);
     document.getElementById("catalog-filter-category")?.addEventListener("change", renderCatalogTable);
 
-    // Modal de Productos
-    document.getElementById("btn-open-add-product")?.addEventListener("click", () => openProductModal());
-    document.getElementById("btn-close-modal")?.addEventListener("click", closeProductModal);
-    document.getElementById("btn-cancel-modal")?.addEventListener("click", closeProductModal);
-    document.getElementById("product-form")?.addEventListener("submit", saveProduct);
-
     // Filtros de Pedidos
     document.getElementById("orders-search")?.addEventListener("input", renderOrdersTable);
     document.getElementById("orders-filter-status")?.addEventListener("change", renderOrdersTable);
@@ -953,6 +1188,19 @@ document.addEventListener('DOMContentLoaded', () => {
         if (navOrdersBtn) navOrdersBtn.click();
     });
 
-    // Comprobar sesión al inicio
+    // Activar pestaña según hash de URL (#catalogo, #pedidos, etc.)
+    const activateTabFromHash = () => {
+        const hash = window.location.hash.replace('#', '');
+        if (hash) {
+            const targetBtn = document.querySelector(`.sidebar-nav .nav-item[data-target="section-${hash}"]`);
+            if (targetBtn) {
+                targetBtn.click();
+            }
+        }
+    };
+
+    // Comprobar sesión e inicializar controles al inicio
     checkSession();
+    initSidebarToggle();
+    activateTabFromHash();
 });

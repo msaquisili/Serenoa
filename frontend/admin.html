@@ -85,6 +85,15 @@
     <div id="dashboard-view" class="admin-layout hidden">
         <!-- SIDEBAR -->
         <aside class="admin-sidebar">
+            <!-- BOTÓN DE HAMBURGUESA PEGADO AL SIDEBAR EN EL LADO DERECHO SUPERIOR -->
+            <button id="btn-sidebar-toggle" class="btn-sidebar-toggle" aria-label="Alternar menú lateral" title="Contraer / expandir menú">
+                <div class="hamburger-icon">
+                    <span class="hamburger-line line-1"></span>
+                    <span class="hamburger-line line-2"></span>
+                    <span class="hamburger-line line-3"></span>
+                </div>
+            </button>
+
             <div class="sidebar-brand">
                 <div class="brand-logo-icon">S</div>
                 <div>
@@ -162,8 +171,10 @@
             <!-- TOPBAR -->
             <header class="admin-topbar">
                 <div class="topbar-left">
-                    <h1 id="page-current-title">Panel de Control & Analíticas</h1>
-                    <p class="topbar-subtitle">Métricas de rendimiento en tiempo real</p>
+                    <div>
+                        <h1 id="page-current-title">Panel de Control & Analíticas</h1>
+                        <p class="topbar-subtitle">Métricas de rendimiento en tiempo real</p>
+                    </div>
                 </div>
                 <div class="topbar-right">
                     <!-- Selector de período -->
@@ -194,9 +205,9 @@
                 <!-- 1. SECCIÓN DASHBOARD ANALÍTICO -->
                 <section id="section-dashboard" class="admin-view-section active">
                     
-                    <!-- KPI CARDS -->
+                    <!-- KPI CARDS OPERATIVOS (3 Tarjetas) -->
                     <div class="kpi-grid">
-                        <!-- Ganancias / Ingresos -->
+                        <!-- Ingresos Totales (Solo Pagados/Confirmados) -->
                         <div class="kpi-card">
                             <div class="kpi-header">
                                 <span class="kpi-title">Ingresos Totales</span>
@@ -210,14 +221,13 @@
                             <div class="kpi-value" id="kpi-revenue">$0.00</div>
                             <div class="kpi-trend positive">
                                 <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
-                                    <polyline points="17 6 23 6 23 12"></polyline>
+                                    <polyline points="20 6 9 17 4 12"></polyline>
                                 </svg>
-                                <span id="kpi-revenue-trend">+18.5% vs período anterior</span>
+                                <span>Solo pedidos pagados & confirmados</span>
                             </div>
                         </div>
 
-                        <!-- Número de Ventas -->
+                        <!-- Número de Ventas Efectivas -->
                         <div class="kpi-card">
                             <div class="kpi-header">
                                 <span class="kpi-title">Número de Ventas</span>
@@ -235,32 +245,11 @@
                                     <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
                                     <polyline points="17 6 23 6 23 12"></polyline>
                                 </svg>
-                                <span id="kpi-orders-trend">+12.3% vs período anterior</span>
+                                <span>Ventas cerradas con éxito</span>
                             </div>
                         </div>
 
-                        <!-- Ticket Promedio -->
-                        <div class="kpi-card">
-                            <div class="kpi-header">
-                                <span class="kpi-title">Ticket Promedio</span>
-                                <div class="kpi-icon icon-cream-bg">
-                                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                        <path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path>
-                                        <path d="M22 12A10 10 0 0 0 12 2v10z"></path>
-                                    </svg>
-                                </div>
-                            </div>
-                            <div class="kpi-value" id="kpi-avg-ticket">$0.00</div>
-                            <div class="kpi-trend positive">
-                                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
-                                    <polyline points="17 6 23 6 23 12"></polyline>
-                                </svg>
-                                <span id="kpi-avg-trend">+5.2% valor cliente</span>
-                            </div>
-                        </div>
-
-                        <!-- Clientes / Conversión -->
+                        <!-- Pedidos / Reservas Pendientes -->
                         <div class="kpi-card">
                             <div class="kpi-header">
                                 <span class="kpi-title">Pedidos Pendientes</span>
@@ -273,49 +262,48 @@
                             </div>
                             <div class="kpi-value" id="kpi-pending-orders">0</div>
                             <div class="kpi-trend neutral">
-                                <span id="kpi-pending-sub">Por procesar en cocina</span>
+                                <span id="kpi-pending-sub">Por confirmar o preparar en cocina</span>
                             </div>
                         </div>
                     </div>
 
-                    <!-- GRÁFICOS ANALÍTICOS -->
-                    <div class="charts-grid">
-                        <!-- Gráfico Principal: Evolución de Ventas y Ganancias -->
-                        <div class="chart-card chart-large">
-                            <div class="chart-header">
-                                <div>
-                                    <h3>Evolución de Ingresos y Ganancias</h3>
-                                    <p class="chart-subtitle">Histórico de facturación y volumen de ventas</p>
-                                </div>
-                                <div class="chart-legend-custom">
-                                    <span class="legend-item"><span class="legend-dot dot-revenue"></span> Ingresos ($)</span>
-                                    <span class="legend-item"><span class="legend-dot dot-profit"></span> Ganancia Neta ($)</span>
-                                </div>
+                    <!-- GESTIÓN RÁPIDA DE PEDIDOS (ELEMENTO CENTRAL / PROTAGONISTA) -->
+                    <div class="dashboard-orders-card">
+                        <div class="chart-header">
+                            <div>
+                                <h3>Control Operativo de Pedidos & Reservas</h3>
+                                <p class="chart-subtitle">Gestión de estados en tiempo real (WhatsApp / Instagram / Tienda)</p>
                             </div>
-                            <div class="chart-container">
-                                <canvas id="chart-revenue-sales"></canvas>
-                            </div>
+                            <button class="btn-link" id="btn-view-all-orders" style="font-size:0.9rem; font-weight:700;">Ver todos en tabla &rarr;</button>
                         </div>
+                        <div class="table-responsive">
+                            <table class="admin-table">
+                                <thead>
+                                    <tr>
+                                        <th>Pedido</th>
+                                        <th>Cliente & Contacto</th>
+                                        <th>Detalle de Creaciones</th>
+                                        <th>Fecha / Hora</th>
+                                        <th>Total</th>
+                                        <th>Estado de Pago</th>
+                                        <th>Estado de Logística</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="dashboard-orders-table-body">
+                                    <!-- Se renderiza dinámicamente con selectores independientes -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
 
-                        <!-- Gráfico de Donut: Ventas por Categoría -->
+                    <!-- MÉTRICAS DE INVENTARIO Y LOGÍSTICA DE COCINA -->
+                    <div class="charts-grid-inventory">
+                        <!-- Gráfico de Barras: Top 5 Productos -->
                         <div class="chart-card">
                             <div class="chart-header">
                                 <div>
-                                    <h3>Ventas por Categoría</h3>
-                                    <p class="chart-subtitle">Distribución porcentual de la demanda</p>
-                                </div>
-                            </div>
-                            <div class="chart-container-donut">
-                                <canvas id="chart-categories"></canvas>
-                            </div>
-                        </div>
-
-                        <!-- Gráfico de Barras: Top 5 Productos -->
-                        <div class="chart-card chart-large">
-                            <div class="chart-header">
-                                <div>
                                     <h3>Top 5 Postres Más Vendidos</h3>
-                                    <p class="chart-subtitle">Unidades vendidas por producto artesanal</p>
+                                    <p class="chart-subtitle">Planificación de insumos y demanda</p>
                                 </div>
                             </div>
                             <div class="chart-container">
@@ -323,17 +311,16 @@
                             </div>
                         </div>
 
-                        <!-- Resumen Rápido / Actividad -->
-                        <div class="chart-card summary-card">
+                        <!-- Gráfico Donut: Ventas por Categoría -->
+                        <div class="chart-card">
                             <div class="chart-header">
                                 <div>
-                                    <h3>Últimos Pedidos</h3>
-                                    <p class="chart-subtitle">Actividad reciente de clientes</p>
+                                    <h3>Ventas por Categoría</h3>
+                                    <p class="chart-subtitle">Distribución porcentual por familias de postres</p>
                                 </div>
-                                <button class="btn-link" id="btn-view-all-orders">Ver todos</button>
                             </div>
-                            <div class="recent-orders-mini" id="mini-orders-list">
-                                <!-- Se renderiza dinámicamente -->
+                            <div class="chart-container-donut">
+                                <canvas id="chart-categories"></canvas>
                             </div>
                         </div>
                     </div>
@@ -359,13 +346,13 @@
                                 <option value="Postres Especiales">Postres Especiales</option>
                             </select>
 
-                            <button id="btn-open-add-product" class="btn-dark">
+                            <a href="nuevo_producto.html" id="btn-open-add-product" class="btn-dark">
                                 <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                                     <line x1="12" y1="5" x2="12" y2="19"></line>
                                     <line x1="5" y1="12" x2="19" y2="12"></line>
                                 </svg>
                                 <span>Nuevo Producto</span>
-                            </button>
+                            </a>
                         </div>
                     </div>
 
@@ -401,9 +388,8 @@
 
                         <select id="orders-filter-status" class="select-filter">
                             <option value="all">Todos los estados</option>
-                            <option value="Pendiente">Pendientes</option>
-                            <option value="En preparación">En preparación</option>
-                            <option value="Entregado">Entregados</option>
+                            <option value="Pendiente">Pendientes / Reservas</option>
+                            <option value="Pagado">Pagados / Confirmados</option>
                             <option value="Cancelado">Cancelados</option>
                         </select>
                     </div>
@@ -413,12 +399,12 @@
                             <thead>
                                 <tr>
                                     <th>ID Pedido</th>
-                                    <th>Cliente</th>
+                                    <th>Cliente & Contacto</th>
                                     <th>Productos</th>
                                     <th>Fecha</th>
                                     <th>Total</th>
-                                    <th>Estado</th>
-                                    <th>Cambiar Estado</th>
+                                    <th>Estado de Pago</th>
+                                    <th>Estado de Logística</th>
                                 </tr>
                             </thead>
                             <tbody id="orders-table-body">
@@ -443,60 +429,8 @@
         </div>
     </div>
 
-    <!-- MODAL PARA CREAR / EDITAR PRODUCTO -->
-    <div id="modal-product" class="modal-overlay hidden">
-        <div class="modal-content fade-in">
-            <div class="modal-header">
-                <h3 id="modal-product-title">Nuevo Producto</h3>
-                <button id="btn-close-modal" class="modal-close" aria-label="Cerrar">&times;</button>
-            </div>
-            <form id="product-form" class="modal-form">
-                <input type="hidden" id="prod-id">
-                
-                <div class="form-group">
-                    <label for="prod-name">Nombre del Postre *</label>
-                    <input type="text" id="prod-name" placeholder="Ej: Tarta Selva Negra" required>
-                </div>
-
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="prod-category">Categoría *</label>
-                        <select id="prod-category" required>
-                            <option value="Tartas">Tartas</option>
-                            <option value="Cheesecakes">Cheesecakes</option>
-                            <option value="Macarons">Macarons</option>
-                            <option value="Postres Especiales">Postres Especiales</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="prod-price">Precio ($ USD) *</label>
-                        <input type="number" id="prod-price" step="0.01" min="0" placeholder="18.50" required>
-                    </div>
-                </div>
-
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="prod-stock">Stock Disponible *</label>
-                        <input type="number" id="prod-stock" min="0" placeholder="15" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="prod-image">URL de Imagen</label>
-                        <input type="url" id="prod-image" placeholder="https://images.unsplash.com/...">
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label for="prod-desc">Descripción detallada</label>
-                    <textarea id="prod-desc" rows="3" placeholder="Ingredientes, notas de sabor, presentación..."></textarea>
-                </div>
-
-                <div class="modal-footer">
-                    <button type="button" id="btn-cancel-modal" class="btn-secondary">Cancelar</button>
-                    <button type="submit" class="btn-dark">Guardar Producto</button>
-                </div>
-            </form>
-        </div>
-    </div>
+    <!-- SIDEBAR OVERLAY PARA MÓVIL -->
+    <div id="sidebar-overlay" class="sidebar-overlay"></div>
 
     <!-- TOAST NOTIFICATION CONTAINER -->
     <div id="toast-container" class="toast-container"></div>
