@@ -78,9 +78,12 @@ app.use((req, res, next) => {
 });
 
 const path = require('path');
+const fs = require('fs');
 
-// Servir archivos estáticos del frontend (HTML, CSS, JS, imágenes)
+// Servir archivos estáticos del frontend (soporta tanto /frontend/... como rutas directas y raíz)
+app.use('/frontend', express.static(path.join(__dirname, '../frontend')));
 app.use(express.static(path.join(__dirname, '../frontend')));
+app.use(express.static(path.join(__dirname, '..')));
 
 // ============================================================================
 // 2. RUTAS DE LA API Y VISTAS
@@ -117,9 +120,19 @@ app.get('/admin', (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/admin.html'));
 });
 
-// Ruta raíz para servir el catálogo público de clientes
+// Ruta limpia para acceder a la vista de nuevo/editar producto
+app.get(['/nuevo_producto', '/nuevo-producto'], (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/nuevo_producto.html'));
+});
+
+// Ruta raíz para servir el catálogo público de clientes (busca en raíz y en frontend)
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/index.html'));
+    const rootIndex = path.join(__dirname, '../index.html');
+    const frontendIndex = path.join(__dirname, '../frontend/index.html');
+    if (fs.existsSync(rootIndex)) {
+        return res.sendFile(rootIndex);
+    }
+    return res.sendFile(frontendIndex);
 });
 
 // Endpoint informativo de la API

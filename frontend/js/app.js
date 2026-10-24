@@ -81,8 +81,20 @@ const DEFAULT_PRODUCTS = [
         imagen: "https://images.unsplash.com/photo-1571877227200-a0d98ea607e9?q=80&w=400&auto=format&fit=crop",
         descripcion: "Bizcochos savoiardi bañados en café de especialidad y crema suave de queso mascarpone.",
         activo: true
+    },
+    {
+        id: "prod-7",
+        nombre: "Galletas de mantequilla",
+        categoria: "Galletas",
+        precio: 5.00,
+        stock: 10,
+        imagen: "https://images.unsplash.com/photo-1558961363-fa8fdf82db35?q=80&w=400&auto=format&fit=crop",
+        descripcion: "Crujientes galletas artesanales horneadas con mantequilla de campo y un toque de vainilla.",
+        activo: true
     }
 ];
+
+const CACHE_KEY = 'serenoa_catalog_cache_v2';
 
 let allProducts = [];
 let activeCategory = 'Todos';
@@ -90,8 +102,56 @@ let searchQuery = '';
 let cart = [];
 
 // ============================================================================
-// 2. PERSISTENCIA Y CARGA DE PRODUCTOS
+// 2. PERSISTENCIA Y CARGA DE PRODUCTOS (CACHÉ + STALE-WHILE-REVALIDATE)
 // ============================================================================
+
+/**
+ * Obtiene los productos cacheados localmente de inmediato (0ms)
+ */
+const getCachedProducts = () => {
+    try {
+        const stored = localStorage.getItem(CACHE_KEY) || localStorage.getItem('serenoa_products');
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                return parsed.map(normalizeProduct).filter(p => p.activo && p.stock > 0);
+            }
+        }
+    } catch (err) {
+        console.warn('Error leyendo caché local de catálogo:', err);
+    }
+    return DEFAULT_PRODUCTS.map(normalizeProduct);
+};
+
+/**
+ * Almacena productos en caché persistente con protección de cuota
+ */
+const setCachedProducts = (products) => {
+    try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify(products));
+        localStorage.setItem('serenoa_products', JSON.stringify(products));
+    } catch (storageErr) {
+        try {
+            const lightweight = products.map(p => ({
+                ...p,
+                imagen: (p.imagen && p.imagen.startsWith('data:') && p.imagen.length > 30000)
+                    ? 'https://images.unsplash.com/photo-1551024601-bec78aea704b?q=80&w=400'
+                    : p.imagen
+            }));
+            localStorage.setItem(CACHE_KEY, JSON.stringify(lightweight));
+            localStorage.setItem('serenoa_products', JSON.stringify(lightweight));
+        } catch (ignore) {}
+    }
+};
+
+/**
+ * Detecta si la aplicación se ejecuta en GitHub Pages
+ */
+const isGitHubPages = () => {
+    if (typeof window === 'undefined') return false;
+    return window.location.hostname.includes('github.io') || 
+           (window.location.protocol === 'https:' && !window.location.hostname.includes('localhost'));
+};
 
 /**
  * Normaliza objetos de producto provenientes de API (MongoDB) o LocalStorage
@@ -111,6 +171,12 @@ const normalizeProduct = (p) => ({
  * Obtiene los productos desde el Backend (MongoDB Atlas) o fallback a LocalStorage
  */
 const fetchProductsFromBackend = async () => {
+    // Si estamos en GitHub Pages (HTTPS estático), cargamos de inmediato del caché
+    // para evitar bloqueos por Mixed Content y timeouts de red con localhost
+    if (isGitHubPages()) {
+        return getCachedProducts();
+    }
+
     const urlsToTry = [
         `${getApiBaseUrl()}/api/productos`,
         'http://127.0.0.1:5000/api/productos',
@@ -120,50 +186,25 @@ const fetchProductsFromBackend = async () => {
 
     for (const url of uniqueUrls) {
         try {
-            const response = await fetch(url, { cache: 'no-store' });
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 2000);
+            const response = await fetch(url, { signal: controller.signal, cache: 'no-store' });
+            clearTimeout(timeoutId);
+
             if (response.ok) {
                 const resData = await response.json();
                 if (resData.success && Array.isArray(resData.data) && resData.data.length > 0) {
                     const normalized = resData.data.map(normalizeProduct).filter(p => p.activo && p.stock > 0);
-                    
-                    // Sincronizar copia local de forma aislada para que QuotaExceededError nunca interrumpa la carga
-                    try {
-                        localStorage.setItem('serenoa_products', JSON.stringify(normalized));
-                    } catch (storageErr) {
-                        console.warn('Aviso de almacenamiento: localStorage excedió su cuota. Guardando versión ligera:', storageErr);
-                        try {
-                            const lightweight = normalized.map(p => ({
-                                ...p,
-                                imagen: (p.imagen && p.imagen.startsWith('data:') && p.imagen.length > 50000)
-                                    ? 'https://images.unsplash.com/photo-1551024601-bec78aea704b?q=80&w=400'
-                                    : p.imagen
-                            }));
-                            localStorage.setItem('serenoa_products', JSON.stringify(lightweight));
-                        } catch (ignore) {}
-                    }
-
+                    setCachedProducts(normalized);
                     return normalized;
                 }
             }
         } catch (e) {
-            console.warn(`Intento de conexión a ${url} no disponible:`, e.message);
+            // Continúa con la siguiente URL si falla
         }
     }
 
-    // Fallback a LocalStorage o Mock inicial si ningún endpoint respondió
-    try {
-        const stored = localStorage.getItem('serenoa_products');
-        if (stored) {
-            const parsed = JSON.parse(stored);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-                return parsed.map(normalizeProduct).filter(p => p.activo && p.stock > 0);
-            }
-        }
-    } catch (err) {
-        console.error('Error leyendo LocalStorage:', err);
-    }
-
-    return DEFAULT_PRODUCTS.map(normalizeProduct);
+    return getCachedProducts();
 };
 
 // ============================================================================
@@ -252,10 +293,16 @@ const getCartTotalPrice = () => {
 
 const bumpCartBadge = () => {
     const badge = document.getElementById('cart-count-badge');
+    const floatBtn = document.getElementById('btn-cart-toggle');
     if (badge) {
         badge.classList.remove('bump');
         void badge.offsetWidth; // Trigger reflow
         badge.classList.add('bump');
+    }
+    if (floatBtn) {
+        floatBtn.classList.remove('bump');
+        void floatBtn.offsetWidth;
+        floatBtn.classList.add('bump');
     }
 };
 
@@ -399,45 +446,48 @@ const renderCardActionHtml = (product) => {
 
     if (qty > 0) {
         return `
-            <div class="card-qty-control" data-product-id="${product.id}">
-                <button class="btn-card-qty btn-card-minus" data-id="${product.id}" title="Disminuir" aria-label="Disminuir cantidad">-</button>
-                <span class="card-qty-value">${qty}</span>
-                <button class="btn-card-qty btn-card-plus" data-id="${product.id}" title="Aumentar" aria-label="Aumentar cantidad">+</button>
+            <div class="card-qty-control flex items-center justify-between bg-[#EFE9DF] rounded-full p-1.5 border border-[#1A3628]/25 shadow-inner" data-product-id="${product.id}">
+                <button class="btn-card-qty btn-card-minus w-8 h-8 rounded-full bg-white text-[#1A3628] hover:bg-[#1A3628] hover:text-white border border-[#1A3628]/25 flex items-center justify-center font-extrabold transition-all cursor-pointer shadow-sm active:scale-90 text-lg leading-none" data-id="${product.id}" title="Disminuir" aria-label="Disminuir cantidad">−</button>
+                <span class="card-qty-value font-extrabold text-[#1A3628] text-base px-2.5 select-none">${qty}</span>
+                <button class="btn-card-qty btn-card-plus w-8 h-8 rounded-full bg-white text-[#1A3628] hover:bg-[#1A3628] hover:text-white border border-[#1A3628]/25 flex items-center justify-center font-extrabold transition-all cursor-pointer shadow-sm active:scale-90 text-lg leading-none" data-id="${product.id}" title="Aumentar" aria-label="Aumentar cantidad">+</button>
             </div>
         `;
     }
 
     return `
-        <button class="btn-dark btn-add-cart" data-id="${product.id}" data-name="${product.nombre}" style="width: 100%; justify-content: center; padding: 0.8rem;">
+        <button class="btn-dark btn-add-cart w-full py-2.5 sm:py-3 px-4 bg-[#1A3628] hover:bg-[#C49F6A] text-white font-medium rounded-full text-xs sm:text-sm flex items-center justify-center gap-2 transition-all duration-300 shadow-sm active:scale-95 cursor-pointer" data-id="${product.id}" data-name="${product.nombre}">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path d="M12 4v16m8-8H4"></path>
+            </svg>
             Añadir al Carrito
         </button>
     `;
 };
 
 /**
- * Plantilla de tarjeta de producto Serenoa
+ * Plantilla de tarjeta de producto Serenoa con diseño responsive
  */
 const crearTarjetaProducto = (producto) => {
     return `
-        <div class="card fade-in" id="card-prod-${producto.id}" style="display:flex; flex-direction:column; justify-content:space-between; overflow:hidden;">
+        <div class="card group bg-[#FAF8F5] rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-xl transition-all duration-300 border border-[#1A3628]/10 flex flex-col justify-between overflow-hidden fade-in" id="card-prod-${producto.id}">
             <div>
-                <div style="height: 200px; border-radius: 8px; overflow: hidden; margin-bottom: 1.2rem; background: #eee; position:relative;">
+                <div class="relative h-44 sm:h-52 w-full rounded-xl overflow-hidden mb-3 sm:mb-4 bg-gray-100">
                     <img src="${producto.imagen}" 
                          alt="${producto.nombre}" 
                          loading="lazy"
                          onerror="this.src='https://images.unsplash.com/photo-1551024601-bec78aea704b?q=80&w=400'"
-                         style="width: 100%; height: 100%; object-fit: cover; transition: transform 0.3s ease;">
-                    <span style="position:absolute; top:10px; left:10px; background:rgba(26,54,40,0.85); color:white; font-size:0.75rem; font-weight:600; padding:0.25rem 0.7rem; border-radius:50px; backdrop-filter:blur(4px);">
+                         class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+                    <span class="absolute top-2.5 left-2.5 bg-[#1A3628]/90 text-white text-[11px] sm:text-xs font-semibold px-2.5 py-0.5 sm:py-1 rounded-full backdrop-blur-md shadow-sm">
                         ${producto.categoria}
                     </span>
                 </div>
-                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom: 0.5rem; gap:0.5rem;">
-                    <h3 style="font-size: 1.2rem; color: var(--dark-green); line-height: 1.2;">${producto.nombre}</h3>
-                    <span style="font-size: 1.25rem; font-weight: 700; color: var(--gold); font-family: var(--font-serif); white-space:nowrap;">$${Number(producto.precio).toFixed(2)}</span>
+                <div class="flex justify-between items-start gap-2 mb-1.5 sm:mb-2">
+                    <h3 class="text-base sm:text-lg font-bold text-[#1A3628] leading-tight line-clamp-2">${producto.nombre}</h3>
+                    <span class="text-base sm:text-lg font-extrabold text-[#A87E50] font-sans tracking-tight tabular-nums whitespace-nowrap">$${Number(producto.precio).toFixed(2)}</span>
                 </div>
-                <p style="color: var(--text-light); font-size: 0.88rem; margin-bottom: 1.2rem; line-height: 1.4;">${producto.descripcion}</p>
+                <p class="text-[#666666] text-xs sm:text-sm line-clamp-2 mb-3 sm:mb-4 leading-relaxed">${producto.descripcion}</p>
             </div>
-            <div class="card-action-container" id="card-action-${producto.id}">
+            <div class="card-action-container mt-auto" id="card-action-${producto.id}">
                 ${renderCardActionHtml(producto)}
             </div>
         </div>
@@ -662,16 +712,32 @@ window.serenoaApp = {
 document.addEventListener('DOMContentLoaded', async () => {
     cart = loadCartFromStorage();
 
-    // 1. Cargar productos desde API
-    const loaderDestacados = document.getElementById('loader-destacados');
-    if (loaderDestacados) loaderDestacados.classList.remove('hidden');
-
-    allProducts = await fetchProductsFromBackend();
-
+    // 0. CARGA INSTANTÁNEA (0ms) DESDE CACHÉ LOCAL (Stale-While-Revalidate)
+    // Permite que en GitHub Pages o redes móviles el catálogo aparezca inmediatamente sin esperar a la red
+    allProducts = getCachedProducts();
     renderDestacadosGrid();
     renderCategoryPills();
     renderCompletoGrid();
     renderCartUI();
+
+    // Ocultar loaders inmediatamente si ya tenemos productos en caché
+    if (allProducts.length > 0) {
+        document.getElementById('loader-destacados')?.classList.add('hidden');
+        document.getElementById('loader-completo')?.classList.add('hidden');
+    }
+
+    // 1. REVALIDACIÓN EN SEGUNDO PLANO (Actualiza productos silenciosamente si hay cambios en MongoDB)
+    fetchProductsFromBackend().then(freshProducts => {
+        if (freshProducts && freshProducts.length > 0) {
+            allProducts = freshProducts;
+            renderDestacadosGrid();
+            renderCategoryPills();
+            renderCompletoGrid();
+            syncAllCardQuantityControls();
+        }
+    }).catch(err => {
+        console.warn('Revalidación en segundo plano:', err);
+    });
 
     // 2. Escuchadores de apertura y cierre del carrito
     const btnCartToggle = document.getElementById('btn-cart-toggle');
@@ -885,3 +951,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 });
+
+// ============================================================================
+// 10. SERVICE WORKER PARA CACHÉ & VELOCIDAD INSTANTÁNEA EN GITHUB PAGES
+// ============================================================================
+if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+            .then(reg => {
+                console.log('[Serenoa SW] Service Worker activo para caché:', reg.scope);
+            })
+            .catch(err => {
+                console.log('[Serenoa SW] Registro opcional:', err.message);
+            });
+    });
+}

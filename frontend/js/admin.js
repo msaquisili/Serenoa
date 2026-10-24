@@ -634,6 +634,7 @@ const renderDashboardOrdersTable = () => {
                 order.estado = newPaymentStatus;
                 if (!order.estadoLogistica) order.estadoLogistica = "Por preparar";
                 setStoredData("orders", orders);
+                syncOrderStatusWithBackend(order, { estadoPago: newPaymentStatus, estado: newPaymentStatus });
                 updateDashboardMetrics();
                 initCharts();
                 renderDashboardOrdersTable();
@@ -653,6 +654,7 @@ const renderDashboardOrdersTable = () => {
                 order.estadoLogistica = newLogisticsStatus;
                 if (!order.estadoPago) order.estadoPago = "Pendiente";
                 setStoredData("orders", orders);
+                syncOrderStatusWithBackend(order, { estadoLogistica: newLogisticsStatus });
                 initCharts();
                 renderDashboardOrdersTable();
                 renderOrdersTable();
@@ -823,6 +825,88 @@ const loadProducts = async () => {
     renderCatalogTable();
     updateDashboardMetrics();
     return products;
+};
+
+/**
+ * Normaliza objetos de pedido desde el backend (MongoDB Atlas) o LocalStorage
+ */
+const normalizeBackendOrder = (o) => {
+    let productosText = "";
+    if (typeof o.productos === 'string') {
+        productosText = o.productos;
+    } else if (Array.isArray(o.productos)) {
+        productosText = o.productos.map(p => `${p.cantidad}x ${p.nombre}`).join(', ');
+    }
+
+    const clienteName = (o.cliente && typeof o.cliente === 'object') ? o.cliente.nombre : (o.cliente || 'Cliente Anónimo');
+    const clienteEmail = (o.cliente && typeof o.cliente === 'object') ? (o.cliente.email || o.cliente.telefono || o.cliente.metodoPago || '') : (o.email || o.metodoPago || '');
+    const clienteMetodo = (o.cliente && typeof o.cliente === 'object') ? (o.cliente.metodoPago || '') : (o.metodoPago || '');
+
+    const fechaFormateada = o.createdAt 
+        ? new Date(o.createdAt).toLocaleString('es-EC', { dateStyle: 'short', timeStyle: 'short' })
+        : (o.fecha || 'Reciente');
+
+    const idStr = o.id || (o._id ? `ORD-${o._id.toString().slice(-4).toUpperCase()}` : `ORD-${Date.now().toString().slice(-4)}`);
+
+    return {
+        id: idStr,
+        _id: o._id ? o._id.toString() : (o.id || null),
+        cliente: clienteName,
+        email: clienteEmail,
+        metodoPago: clienteMetodo,
+        productos: productosText,
+        fecha: fechaFormateada,
+        total: Number(o.total) || 0,
+        estadoPago: o.estadoPago || (o.estado === 'Pagado' ? 'Pagado' : (o.estado === 'Cancelado' ? 'Cancelado' : 'Pendiente')),
+        estadoLogistica: o.estadoLogistica || (o.estado === 'Entregado' ? 'Entregado' : (o.estado === 'En preparación' ? 'En preparación' : 'Por preparar')),
+        estado: o.estado || o.estadoPago || 'Pendiente'
+    };
+};
+
+/**
+ * Carga dinámica de pedidos desde el backend (MongoDB Atlas) o fallback a LocalStorage
+ */
+const loadOrders = async () => {
+    const apiBase = getApiBaseUrl();
+    try {
+        const res = await fetch(`${apiBase}/api/pedidos`);
+        if (res.ok) {
+            const resData = await res.json();
+            if (resData.success && Array.isArray(resData.data) && resData.data.length > 0) {
+                orders = resData.data.map(normalizeBackendOrder);
+                setStoredData("orders", orders);
+                renderOrdersTable();
+                renderDashboardOrdersTable();
+                updateDashboardMetrics();
+                return orders;
+            }
+        }
+    } catch (e) {
+        console.warn("Backend no disponible para cargar pedidos, usando almacenamiento local:", e);
+    }
+
+    orders = getStoredData("orders", DEFAULT_ORDERS);
+    renderOrdersTable();
+    renderDashboardOrdersTable();
+    updateDashboardMetrics();
+    return orders;
+};
+
+/**
+ * Sincroniza cambios de estado de pedido con MongoDB Atlas de manera asíncrona
+ */
+const syncOrderStatusWithBackend = async (order, patchPayload) => {
+    if (!order || !order._id) return;
+    try {
+        const apiBase = getApiBaseUrl();
+        await fetch(`${apiBase}/api/pedidos/${order._id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(patchPayload)
+        });
+    } catch (e) {
+        console.warn("No se pudo sincronizar estado del pedido con el backend:", e);
+    }
 };
 
 const updateAdminCategoryFilter = () => {
@@ -1035,6 +1119,7 @@ const renderOrdersTable = () => {
                 order.estado = newPaymentStatus;
                 if (!order.estadoLogistica) order.estadoLogistica = "Por preparar";
                 setStoredData("orders", orders);
+                syncOrderStatusWithBackend(order, { estadoPago: newPaymentStatus, estado: newPaymentStatus });
                 updateDashboardMetrics();
                 initCharts();
                 renderDashboardOrdersTable();
@@ -1053,6 +1138,7 @@ const renderOrdersTable = () => {
                 order.estadoLogistica = newLogisticsStatus;
                 if (!order.estadoPago) order.estadoPago = "Pendiente";
                 setStoredData("orders", orders);
+                syncOrderStatusWithBackend(order, { estadoLogistica: newLogisticsStatus });
                 initCharts();
                 renderDashboardOrdersTable();
                 renderOrdersTable();
@@ -1190,6 +1276,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Inicializar vistas y datos
             loadProducts(); // Sincroniza productos en vivo desde MongoDB Atlas
+            loadOrders(); // Sincroniza pedidos en vivo desde MongoDB Atlas
             initCharts(periodFilter?.value || 'month');
             renderOrdersTable();
             renderMessages();
@@ -1320,9 +1407,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const targetSec = document.getElementById(targetId);
             if (targetSec) targetSec.classList.add('active');
 
-            // Recargar catálogo si se cambia a la pestaña del catálogo o dashboard
-            if (targetId === "section-catalogo" || targetId === "section-dashboard") {
+            // Recargar catálogo si se cambia a la pestaña del catálogo, pedidos o dashboard
+            if (targetId === "section-catalogo" || targetId === "section-dashboard" || targetId === "section-pedidos") {
                 loadProducts();
+                loadOrders();
             }
 
             // Actualizar título
@@ -1389,6 +1477,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const token = sessionStorage.getItem('admin_token') || localStorage.getItem('admin_token');
         if (token && !dashboardView.classList.contains('hidden')) {
             loadProducts();
+            loadOrders();
         }
     });
 });

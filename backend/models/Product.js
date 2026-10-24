@@ -43,9 +43,13 @@ const productSchema = new mongoose.Schema(
     }
 );
 
-// Virtual para compatibilidad con campos de frontend (ej. 'desc' o 'activo')
+// Virtuals para compatibilidad con campos de frontend (ej. 'desc' o 'activo')
 productSchema.virtual('activo').get(function () {
     return this.disponibilidad;
+});
+
+productSchema.virtual('desc').get(function () {
+    return this.descripcion;
 });
 
 productSchema.set('toJSON', { virtuals: true });

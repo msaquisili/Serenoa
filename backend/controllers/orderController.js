@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Order = require('../models/Order');
 const Product = require('../models/Product');
 
@@ -30,8 +31,10 @@ const createOrder = async (req, res) => {
             const qty = Number(item.cantidad) || 1;
             const price = Number(item.precioUnitario || item.precio) || 0;
             calculatedTotal += qty * price;
+            const rawId = item.producto || item.id;
+            const validProdId = (rawId && mongoose.Types.ObjectId.isValid(rawId)) ? rawId : null;
             return {
-                producto: item.producto || item.id || null,
+                producto: validProdId,
                 nombre: item.nombre || 'Postre Serenoa',
                 cantidad: qty,
                 precioUnitario: price
