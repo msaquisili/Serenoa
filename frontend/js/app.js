@@ -446,10 +446,10 @@ const renderCardActionHtml = (product) => {
 
     if (qty > 0) {
         return `
-            <div class="card-qty-control flex items-center justify-between bg-[#EFE9DF] rounded-full p-1.5 border border-[#1A3628]/25 shadow-inner" data-product-id="${product.id}">
-                <button class="btn-card-qty btn-card-minus w-8 h-8 rounded-full bg-white text-[#1A3628] hover:bg-[#1A3628] hover:text-white border border-[#1A3628]/25 flex items-center justify-center font-extrabold transition-all cursor-pointer shadow-sm active:scale-90 text-lg leading-none" data-id="${product.id}" title="Disminuir" aria-label="Disminuir cantidad">−</button>
-                <span class="card-qty-value font-extrabold text-[#1A3628] text-base px-2.5 select-none">${qty}</span>
-                <button class="btn-card-qty btn-card-plus w-8 h-8 rounded-full bg-white text-[#1A3628] hover:bg-[#1A3628] hover:text-white border border-[#1A3628]/25 flex items-center justify-center font-extrabold transition-all cursor-pointer shadow-sm active:scale-90 text-lg leading-none" data-id="${product.id}" title="Aumentar" aria-label="Aumentar cantidad">+</button>
+            <div class="card-qty-control flex items-center justify-between bg-[#EFE9DF] rounded-full p-1.5 border border-[#1A3628]/25 shadow-inner" style="background-color: #EFE9DF !important; border-color: rgba(26,54,40,0.25) !important;" data-product-id="${product.id}">
+                <button class="btn-card-qty btn-card-minus w-8 h-8 rounded-full bg-white text-[#1A3628] hover:bg-[#1A3628] hover:text-white flex items-center justify-center font-extrabold transition-all cursor-pointer shadow-sm active:scale-90 text-lg leading-none" style="color: #1A3628 !important; background-color: #FFFFFF !important; border: 1.5px solid rgba(26,54,40,0.25) !important;" data-id="${product.id}" title="Disminuir" aria-label="Disminuir cantidad">−</button>
+                <span class="card-qty-value font-extrabold text-[#1A3628] text-base px-2.5 select-none" style="color: #1A3628 !important; font-weight: 800 !important; font-size: 1.1rem !important;">${qty}</span>
+                <button class="btn-card-qty btn-card-plus w-8 h-8 rounded-full bg-white text-[#1A3628] hover:bg-[#1A3628] hover:text-white flex items-center justify-center font-extrabold transition-all cursor-pointer shadow-sm active:scale-90 text-lg leading-none" style="color: #1A3628 !important; background-color: #FFFFFF !important; border: 1.5px solid rgba(26,54,40,0.25) !important;" data-id="${product.id}" title="Aumentar" aria-label="Aumentar cantidad">+</button>
             </div>
         `;
     }
@@ -483,7 +483,7 @@ const crearTarjetaProducto = (producto) => {
                 </div>
                 <div class="flex justify-between items-start gap-2 mb-1.5 sm:mb-2">
                     <h3 class="text-base sm:text-lg font-bold text-[#1A3628] leading-tight line-clamp-2">${producto.nombre}</h3>
-                    <span class="text-base sm:text-lg font-extrabold text-[#A87E50] font-sans tracking-tight tabular-nums whitespace-nowrap">$${Number(producto.precio).toFixed(2)}</span>
+                    <span class="text-base sm:text-lg font-extrabold text-[#A87E50] font-sans tracking-tight tabular-nums whitespace-nowrap" style="font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif !important; color: #A87E50 !important; font-weight: 800 !important;">$${Number(producto.precio).toFixed(2)}</span>
                 </div>
                 <p class="text-[#666666] text-xs sm:text-sm line-clamp-2 mb-3 sm:mb-4 leading-relaxed">${producto.descripcion}</p>
             </div>
