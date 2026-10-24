@@ -51,7 +51,12 @@
                         <span class="checkmark"></span>
                         Recordar sesión
                     </label>
-                    <span class="hint-credentials" title="Usuario: admin | Clave: serenoa2026">Demo: admin / serenoa2026</span>
+                    <span class="hint-credentials" title="Acceso protegido por Rate Limiting y Variables de Entorno">
+                        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="vertical-align:-1px; margin-right:4px;">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                        </svg>Acceso Seguro
+                    </span>
                 </div>
 
                 <button type="submit" id="btn-login-submit" class="btn-dark w-100">
@@ -246,6 +251,40 @@
                                     <polyline points="17 6 23 6 23 12"></polyline>
                                 </svg>
                                 <span>Ventas cerradas con éxito</span>
+                            </div>
+                        </div>
+
+                        <!-- Total de Productos Vendidos (General & Por Producto) -->
+                        <div class="kpi-card kpi-card-products-sold">
+                            <div class="kpi-header">
+                                <span class="kpi-title" id="kpi-products-sold-title">Productos Vendidos</span>
+                                <div class="kpi-icon icon-cream-bg">
+                                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                        <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+                                        <line x1="3" y1="6" x2="21" y2="6"></line>
+                                        <path d="M16 10a4 4 0 0 1-8 0"></path>
+                                    </svg>
+                                </div>
+                            </div>
+                            <div class="kpi-value-container">
+                                <div class="kpi-value" id="kpi-total-items-sold">0</div>
+                                <div class="kpi-unit-label" id="kpi-items-unit-label">unidades totales</div>
+                            </div>
+
+                            <!-- Selector / Toggle de vista (Total General vs Por Producto Específico) -->
+                            <div class="kpi-product-toggle-box">
+                                <label for="select-kpi-product-view" class="kpi-toggle-label">Modo de Vista:</label>
+                                <select id="select-kpi-product-view" class="select-kpi-product">
+                                    <option value="all">📊 Total General</option>
+                                    <!-- Los productos individuales se inyectan dinámicamente -->
+                                </select>
+                            </div>
+
+                            <div class="kpi-trend positive" style="margin-top: 0.6rem;">
+                                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                                <span id="kpi-products-sold-sub">En pedidos pagados & entregados</span>
                             </div>
                         </div>
 

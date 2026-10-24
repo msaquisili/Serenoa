@@ -61,6 +61,13 @@ const DEFAULT_PRODUCTS = [
     }
 ];
 
+const getApiBaseUrl = () => {
+    if (typeof window === 'undefined') return 'http://localhost:5000';
+    if (window.location.origin && window.location.origin.includes(':5000')) return '';
+    const host = window.location.hostname || 'localhost';
+    return `${window.location.protocol}//${host}:5000`;
+};
+
 const getStoredCategories = () => {
     try {
         const item = localStorage.getItem('serenoa_categories');
@@ -95,7 +102,17 @@ const setStoredProducts = (val) => {
     try {
         localStorage.setItem('serenoa_products', JSON.stringify(val));
     } catch (e) {
-        console.error("Error guardando en localStorage", e);
+        console.warn("Aviso de almacenamiento en setStoredProducts (cuota excedida):", e);
+        try {
+            // Guardar copia ligera si la cuota fue excedida
+            const lightweight = val.map(p => ({
+                ...p,
+                imagen: (p.imagen && p.imagen.startsWith('data:') && p.imagen.length > 50000)
+                    ? DEFAULT_IMAGE_PLACEHOLDER
+                    : p.imagen
+            }));
+            localStorage.setItem('serenoa_products', JSON.stringify(lightweight));
+        } catch (ignore) {}
     }
 };
 
@@ -389,7 +406,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const reader = new FileReader();
             reader.onload = (event) => {
-                updatePreviewImage(event.target.result);
+                const rawData = event.target.result;
+                // Comprimir la imagen cargada usando un canvas para evitar saturar la memoria y localStorage
+                const img = new Image();
+                img.onload = () => {
+                    const maxDim = 800;
+                    let width = img.width;
+                    let height = img.height;
+                    if (width > maxDim || height > maxDim) {
+                        if (width > height) {
+                            height = Math.round((height * maxDim) / width);
+                            width = maxDim;
+                        } else {
+                            width = Math.round((width * maxDim) / height);
+                            height = maxDim;
+                        }
+                    }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.82);
+                    updatePreviewImage(compressedDataUrl);
+                };
+                img.onerror = () => {
+                    updatePreviewImage(rawData);
+                };
+                img.src = rawData;
             };
             reader.readAsDataURL(file);
         } else {
@@ -421,16 +465,33 @@ document.addEventListener('DOMContentLoaded', () => {
     // 7. Modo Edición (?id=...)
     const urlParams = new URLSearchParams(window.location.search);
     const productId = urlParams.get('id');
-    const products = getStoredProducts();
+    let products = getStoredProducts();
 
-    if (productId) {
-        const product = products.find(p => p.id === productId);
+    const loadProductDataForEditing = async () => {
+        if (!productId) return;
+        let product = products.find(p => p.id === productId || p._id === productId);
+
+        if (!product) {
+            try {
+                const apiBase = getApiBaseUrl();
+                const res = await fetch(`${apiBase}/api/productos/${productId}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.success && data.data) {
+                        product = data.data;
+                    }
+                }
+            } catch (e) {
+                console.warn("No se pudo obtener el producto por ID del backend:", e);
+            }
+        }
+
         if (product) {
             document.title = `Serenoa | Editar "${product.nombre}"`;
             pageTitle.textContent = `Editar Producto`;
             btnSubmitText.textContent = "Actualizar Producto";
 
-            inputId.value = product.id;
+            inputId.value = product._id || product.id;
             inputName.value = product.nombre || "";
             
             // Comprobar si la categoría existe en la lista guardada
@@ -449,17 +510,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 inputStatus.value = product.estado;
             } else if (product.stock === 0) {
                 inputStatus.value = "Agotado";
-            } else if (product.activo === false) {
+            } else if (product.activo === false || product.disponibilidad === false) {
                 inputStatus.value = "Oculto";
             } else {
                 inputStatus.value = "Disponible";
             }
 
-            inputDesc.value = product.desc || "";
+            inputDesc.value = product.desc || product.descripcion || "";
 
             if (product.imagen) {
                 if (product.imagen.startsWith("data:")) {
-                    fileChosenText.textContent = "Imagen guardada en el postre";
+                    fileChosenText.textContent = "Imagen cargada";
                 } else {
                     inputImageUrl.value = product.imagen;
                 }
@@ -467,10 +528,12 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             updatePreviewMeta();
         }
-    }
+    };
+
+    loadProductDataForEditing();
 
     // 8. Procesar Envío del Formulario
-    form.addEventListener('submit', (e) => {
+    form.addEventListener('submit', async (e) => {
         e.preventDefault();
 
         const id = inputId.value;
@@ -511,45 +574,80 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        let currentProducts = getStoredProducts();
+        const btnSave = document.getElementById('btn-save-product');
+        const submitText = document.getElementById('btn-submit-text');
+        if (btnSave) btnSave.disabled = true;
+        if (submitText) submitText.textContent = "Guardando...";
 
-        if (id) {
-            // Actualizar existente
-            const index = currentProducts.findIndex(p => p.id === id);
-            if (index !== -1) {
-                currentProducts[index] = {
-                    id,
-                    nombre,
-                    categoria,
-                    precio,
-                    stock,
-                    estado,
-                    activo,
-                    desc,
-                    imagen
-                };
-                setStoredProducts(currentProducts);
-                showToast(`"${nombre}" actualizado con éxito.`);
+        const productPayload = {
+            nombre,
+            descripcion: desc,
+            desc,
+            precio,
+            stock,
+            categoria,
+            imagen,
+            disponibilidad: activo,
+            activo,
+            estado
+        };
+
+        const apiBase = getApiBaseUrl();
+        let savedProduct = null;
+
+        // 1. Guardar en Backend (MongoDB Atlas)
+        try {
+            const url = id ? `${apiBase}/api/productos/${id}` : `${apiBase}/api/productos`;
+            const method = id ? 'PUT' : 'POST';
+
+            const res = await fetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(productPayload)
+            });
+
+            if (res.ok) {
+                const resData = await res.json();
+                if (resData.success && resData.data) {
+                    savedProduct = {
+                        ...productPayload,
+                        id: resData.data._id || resData.data.id || id,
+                        _id: resData.data._id || id
+                    };
+                }
+            } else {
+                console.warn("Backend no pudo guardar producto, guardando localmente.");
             }
-        } else {
-            // Crear nuevo postre
-            const newProduct = {
-                id: `prod-${Date.now()}`,
-                nombre,
-                categoria,
-                precio,
-                stock,
-                estado,
-                activo,
-                desc,
-                imagen
-            };
-            currentProducts.unshift(newProduct);
-            setStoredProducts(currentProducts);
-            showToast(`¡Postre "${nombre}" guardado con éxito!`);
+        } catch (apiErr) {
+            console.warn("Error de conexión con el backend:", apiErr);
         }
 
-        // Redirección suave al catálogo del panel administrativo
+        // 2. Fallback local si backend no estuvo disponible
+        if (!savedProduct) {
+            savedProduct = {
+                id: id || `prod-${Date.now()}`,
+                _id: id || `prod-${Date.now()}`,
+                ...productPayload
+            };
+        }
+
+        // 3. Sincronizar en LocalStorage
+        let currentProducts = getStoredProducts();
+        if (id) {
+            const index = currentProducts.findIndex(p => p.id === id || p._id === id);
+            if (index !== -1) {
+                currentProducts[index] = savedProduct;
+            } else {
+                currentProducts.unshift(savedProduct);
+            }
+        } else {
+            currentProducts.unshift(savedProduct);
+        }
+        setStoredProducts(currentProducts);
+
+        showToast(id ? `"${nombre}" actualizado con éxito.` : `¡Postre "${nombre}" guardado con éxito!`);
+
+        // Redirección al catálogo del panel administrativo
         setTimeout(() => {
             window.location.href = 'admin.html#catalogo';
         }, 700);

@@ -1,0 +1,22 @@
+# Variables de entorno y credenciales privadas (¡Crítico para seguridad!)
+.env
+.env.local
+.env.*.local
+*.env
+backend/.env
+
+# Dependencias de Node.js
+node_modules/
+backend/node_modules/
+
+# Logs de depuración
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json.log
+
+# Archivos del sistema operativo y editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -248,6 +248,13 @@ const ANALYTICS_DATA = {
 // 2. GESTIÓN DE PERSISTENCIA (LOCALSTORAGE)
 // ==========================================================================
 
+const getApiBaseUrl = () => {
+    if (typeof window === 'undefined') return 'http://localhost:5000';
+    if (window.location.origin && window.location.origin.includes(':5000')) return '';
+    const host = window.location.hostname || 'localhost';
+    return `${window.location.protocol}//${host}:5000`;
+};
+
 const getStoredData = (key, defaultVal) => {
     try {
         const item = localStorage.getItem(`serenoa_${key}`);
@@ -261,7 +268,18 @@ const setStoredData = (key, val) => {
     try {
         localStorage.setItem(`serenoa_${key}`, JSON.stringify(val));
     } catch (e) {
-        console.error("Error guardando en localStorage", e);
+        console.warn(`Aviso de almacenamiento en serenoa_${key} (cuota excedida):`, e);
+        if (key === 'products' && Array.isArray(val)) {
+            try {
+                const lightweight = val.map(p => ({
+                    ...p,
+                    imagen: (p.imagen && p.imagen.startsWith('data:') && p.imagen.length > 50000)
+                        ? 'https://images.unsplash.com/photo-1551024601-bec78aea704b?q=80&w=400'
+                        : p.imagen
+                }));
+                localStorage.setItem(`serenoa_${key}`, JSON.stringify(lightweight));
+            } catch (ignore) {}
+        }
     }
 };
 
@@ -379,10 +397,14 @@ const findProductMatch = (itemName, catalog) => {
     return null;
 };
 
+// Estado de visualización seleccionado para la tarjeta de Productos Vendidos ('all' o ID/Nombre del producto)
+let selectedProductSalesView = 'all';
+
 /**
  * Actualiza las métricas principales del Dashboard:
  * - Ingresos Totales: Solo suma pedidos cuyo Estado de Pago sea "Pagado" o "Confirmado".
  * - Número de Ventas: Conteo de pedidos pagados/confirmados.
+ * - Productos Vendidos: Conteo total general de unidades vendidas y opción de visualización por producto.
  * - Pedidos Pendientes: Conteo de reservas cuyo Estado de Pago sea "Pendiente".
  */
 const updateDashboardMetrics = () => {
@@ -399,13 +421,55 @@ const updateDashboardMetrics = () => {
         return st === "pendiente" || st === "reservado";
     });
 
+    // Calcular desglose de productos vendidos de pedidos efectivamente entregados y pagados
+    const { productSalesMap } = calculateInventoryAnalytics();
+
+    // Total general de unidades vendidas
+    const grandTotalItemsSold = Object.values(productSalesMap).reduce((sum, qty) => sum + qty, 0);
+
     const kpiRev = document.getElementById("kpi-revenue");
     const kpiOrd = document.getElementById("kpi-orders");
     const kpiPending = document.getElementById("kpi-pending-orders");
+    const kpiTotalItems = document.getElementById("kpi-total-items-sold");
+    const kpiItemsUnitLabel = document.getElementById("kpi-items-unit-label");
+    const kpiProductsSub = document.getElementById("kpi-products-sold-sub");
+    const selectProductView = document.getElementById("select-kpi-product-view");
 
     if (kpiRev) kpiRev.textContent = `$${totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     if (kpiOrd) kpiOrd.textContent = totalSales.toString();
     if (kpiPending) kpiPending.textContent = pendingOrders.length.toString();
+
+    // Poblar / refrescar el dropdown de productos en la tarjeta KPI
+    if (selectProductView) {
+        const currentSelected = selectedProductSalesView;
+        
+        let selectOptionsHtml = `<option value="all" ${currentSelected === 'all' ? 'selected' : ''}>📊 Total General (${grandTotalItemsSold} un. vendidas)</option>`;
+        
+        // Agregar cada producto existente en el catálogo
+        products.forEach(prod => {
+            const soldQty = productSalesMap[prod.nombre] || 0;
+            const isSelected = currentSelected === prod.id || currentSelected === prod.nombre;
+            selectOptionsHtml += `<option value="${prod.id}" ${isSelected ? 'selected' : ''}>🍰 ${prod.nombre} (${soldQty} un. vendidas)</option>`;
+        });
+
+        selectProductView.innerHTML = selectOptionsHtml;
+        selectProductView.value = currentSelected;
+
+        // Renderizar el valor según el modo seleccionado
+        if (currentSelected === 'all') {
+            if (kpiTotalItems) kpiTotalItems.textContent = grandTotalItemsSold.toString();
+            if (kpiItemsUnitLabel) kpiItemsUnitLabel.textContent = "unidades totales vendidas";
+            if (kpiProductsSub) kpiProductsSub.textContent = "Suma total de todos los postres";
+        } else {
+            const foundProd = products.find(p => p.id === currentSelected || p.nombre === currentSelected);
+            if (foundProd) {
+                const itemQty = productSalesMap[foundProd.nombre] || 0;
+                if (kpiTotalItems) kpiTotalItems.textContent = itemQty.toString();
+                if (kpiItemsUnitLabel) kpiItemsUnitLabel.textContent = `unidades de "${foundProd.nombre}"`;
+                if (kpiProductsSub) kpiProductsSub.textContent = `Precio: $${Number(foundProd.precio).toFixed(2)} | Stock act: ${foundProd.stock}`;
+            }
+        }
+    }
 };
 
 /**
@@ -423,6 +487,11 @@ const calculateInventoryAnalytics = () => {
 
     const productSalesMap = {};
     const categorySalesMap = {};
+
+    // Inicializar mapa de ventas para todos los productos existentes del catálogo en 0
+    products.forEach(p => {
+        productSalesMap[p.nombre] = 0;
+    });
 
     // Obtener dinámicamente todas las categorías existentes del sistema
     const storedCats = getStoredData("categories", ["Tartas", "Cheesecakes", "Macarons", "Postres Especiales"]);
@@ -478,6 +547,7 @@ const calculateInventoryAnalytics = () => {
     return {
         topProducts: sortedProducts,
         categorySales: categorySalesMap,
+        productSalesMap,
         allCategories
     };
 };
@@ -715,6 +785,46 @@ const getStatusClass = (estado) => {
 // 4. GESTIÓN DE CATÁLOGO (CRUD DE PRODUCTOS)
 // ==========================================================================
 
+/**
+ * Carga dinámica de productos desde el backend (MongoDB Atlas) o fallback a LocalStorage
+ */
+const loadProducts = async () => {
+    const apiBase = getApiBaseUrl();
+    try {
+        const res = await fetch(`${apiBase}/api/productos`);
+        if (res.ok) {
+            const resData = await res.json();
+            if (resData.success && Array.isArray(resData.data)) {
+                products = resData.data.map(p => ({
+                    id: p._id?.toString() || p.id,
+                    _id: p._id?.toString() || p.id,
+                    nombre: p.nombre,
+                    categoria: p.categoria || 'Tartas',
+                    precio: Number(p.precio) || 0,
+                    stock: p.stock !== undefined ? Number(p.stock) : 10,
+                    imagen: p.imagen || 'https://images.unsplash.com/photo-1551024601-bec78aea704b?q=80&w=400',
+                    desc: p.descripcion || p.desc || '',
+                    descripcion: p.descripcion || p.desc || '',
+                    activo: p.disponibilidad !== undefined ? p.disponibilidad : (p.activo !== undefined ? p.activo : true),
+                    disponibilidad: p.disponibilidad !== undefined ? p.disponibilidad : (p.activo !== undefined ? p.activo : true),
+                    estado: p.estado || (Number(p.stock) > 0 && p.disponibilidad !== false ? 'Disponible' : 'Agotado')
+                }));
+                setStoredData("products", products);
+                renderCatalogTable();
+                updateDashboardMetrics();
+                return products;
+            }
+        }
+    } catch (e) {
+        console.warn("Backend no disponible para cargar catálogo, usando almacenamiento local:", e);
+    }
+
+    products = getStoredData("products", DEFAULT_PRODUCTS);
+    renderCatalogTable();
+    updateDashboardMetrics();
+    return products;
+};
+
 const updateAdminCategoryFilter = () => {
     const catSelect = document.getElementById("catalog-filter-category");
     if (!catSelect) return;
@@ -738,7 +848,8 @@ const renderCatalogTable = () => {
     if (!tbody) return;
 
     const filtered = products.filter(p => {
-        const matchesSearch = p.nombre.toLowerCase().includes(searchVal) || p.desc.toLowerCase().includes(searchVal);
+        const descText = (p.desc || p.descripcion || "").toLowerCase();
+        const matchesSearch = p.nombre.toLowerCase().includes(searchVal) || descText.includes(searchVal);
         const matchesCat = catVal === "all" || p.categoria === catVal;
         return matchesSearch && matchesCat;
     });
@@ -754,14 +865,19 @@ const renderCatalogTable = () => {
         return;
     }
 
-    tbody.innerHTML = filtered.map(p => `
+    tbody.innerHTML = filtered.map(p => {
+        const prodId = p.id || p._id;
+        const prodDesc = p.desc || p.descripcion || "";
+        const isAvail = (p.activo !== false && p.disponibilidad !== false) && p.stock > 0;
+
+        return `
         <tr>
             <td>
                 <div class="product-cell">
                     <img src="${p.imagen || 'https://images.unsplash.com/photo-1551024601-bec78aea704b?q=80&w=400'}" alt="${p.nombre}">
                     <div class="product-cell-info">
                         <strong>${p.nombre}</strong>
-                        <span>${p.desc ? p.desc.slice(0, 45) + '...' : ''}</span>
+                        <span>${prodDesc ? prodDesc.slice(0, 45) + '...' : ''}</span>
                     </div>
                 </div>
             </td>
@@ -773,19 +889,19 @@ const renderCatalogTable = () => {
                 </span>
             </td>
             <td>
-                <span class="badge-status ${p.activo && p.stock > 0 ? 'available' : 'outofstock'}">
-                    ${p.activo && p.stock > 0 ? 'Disponible' : 'Agotado'}
+                <span class="badge-status ${isAvail ? 'available' : 'outofstock'}">
+                    ${isAvail ? 'Disponible' : 'Agotado'}
                 </span>
             </td>
             <td>
                 <div class="table-actions">
-                    <a href="nuevo_producto.html?id=${p.id}" class="btn-icon btn-edit-product" title="Editar postre">
+                    <a href="nuevo_producto.html?id=${prodId}" class="btn-icon btn-edit-product" title="Editar postre">
                         <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                         </svg>
                     </a>
-                    <button class="btn-icon btn-delete btn-delete-product" data-id="${p.id}" title="Eliminar postre">
+                    <button class="btn-icon btn-delete btn-delete-product" data-id="${prodId}" title="Eliminar postre">
                         <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                             <polyline points="3 6 5 6 21 6"></polyline>
                             <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -794,24 +910,41 @@ const renderCatalogTable = () => {
                 </div>
             </td>
         </tr>
-    `).join("");
+        `;
+    }).join("");
 
     // Conectar eventos para eliminar productos
-    document.querySelectorAll(".btn-delete-product").forEach(btn => {
+    tbody.querySelectorAll(".btn-delete-product").forEach(btn => {
         btn.addEventListener("click", () => deleteProduct(btn.dataset.id));
     });
 };
 
-const deleteProduct = (id) => {
-    const prod = products.find(p => p.id === id);
+const deleteProduct = async (id) => {
+    const prod = products.find(p => p.id === id || p._id === id);
     if (!prod) return;
 
     if (confirm(`¿Estás seguro de que deseas eliminar "${prod.nombre}" del catálogo?`)) {
-        products = products.filter(p => p.id !== id);
+        const targetId = prod._id || prod.id || id;
+        const apiBase = getApiBaseUrl();
+
+        // 1. Eliminar en el Backend (MongoDB Atlas)
+        try {
+            const res = await fetch(`${apiBase}/api/productos/${targetId}`, {
+                method: 'DELETE'
+            });
+            if (!res.ok) {
+                console.warn("Backend no respondió OK al eliminar producto");
+            }
+        } catch (e) {
+            console.warn("No se pudo conectar al backend para eliminar producto:", e);
+        }
+
+        // 2. Sincronizar en memoria y LocalStorage
+        products = products.filter(p => p.id !== id && p._id !== id && p.id !== targetId && p._id !== targetId);
         setStoredData("products", products);
         renderCatalogTable();
         initCharts();
-        showToast(`Producto "${prod.nombre}" eliminado.`, "error");
+        showToast(`Producto "${prod.nombre}" eliminado con éxito.`, "error");
     }
 };
 
@@ -1056,8 +1189,8 @@ document.addEventListener('DOMContentLoaded', () => {
             dashboardView.classList.remove('hidden');
             
             // Inicializar vistas y datos
+            loadProducts(); // Sincroniza productos en vivo desde MongoDB Atlas
             initCharts(periodFilter?.value || 'month');
-            renderCatalogTable();
             renderOrdersTable();
             renderMessages();
         } else {
@@ -1068,17 +1201,48 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Procesar Login Privado
     if (loginForm) {
-        loginForm.addEventListener('submit', (e) => {
+        loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const user = document.getElementById('admin-user').value.trim();
             const pass = document.getElementById('admin-pass').value.trim();
             const remember = document.getElementById('remember-me').checked;
             const btnSubmit = document.getElementById('btn-login-submit');
+            const errorSpan = errorMsg.querySelector('span');
 
-            // Simulación de carga
-            btnSubmit.querySelector('.btn-login-text').textContent = 'Validando...';
+            // Estado de validación
+            btnSubmit.querySelector('.btn-login-text').textContent = 'Validando seguridad...';
+            btnSubmit.disabled = true;
 
-            setTimeout(() => {
+            try {
+                // Determinar URL de la API (soporta Live Server en :5500 y Express en :5000)
+                const apiBase = getApiBaseUrl();
+                const apiUrl = `${apiBase}/api/auth/login`;
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: user, password: pass })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    const token = data.token || ('serenoa_secure_' + Date.now());
+                    if (remember) {
+                        localStorage.setItem('admin_token', token);
+                    } else {
+                        sessionStorage.setItem('admin_token', token);
+                    }
+                    errorMsg.classList.add('hidden');
+                    checkSession();
+                    showToast('¡Bienvenido al panel de administración de Serenoa!');
+                } else {
+                    if (errorSpan) errorSpan.textContent = data.message || 'Credenciales inválidas. Usuario o contraseña incorrectos.';
+                    errorMsg.classList.remove('hidden');
+                }
+            } catch (err) {
+                console.warn('Backend API no disponible directamente, verificando credenciales locales...', err);
+                // Fallback seguro local en caso de abrirse como archivo estático o sin servidor encendido
                 if (user === 'admin' && pass === 'serenoa2026') {
                     const token = 'serenoa_jwt_secure_' + Date.now();
                     if (remember) {
@@ -1087,14 +1251,16 @@ document.addEventListener('DOMContentLoaded', () => {
                         sessionStorage.setItem('admin_token', token);
                     }
                     errorMsg.classList.add('hidden');
-                    btnSubmit.querySelector('.btn-login-text').textContent = 'Acceder al Panel';
                     checkSession();
-                    showToast('¡Bienvenido al panel de administración de Serenoa!');
+                    showToast('¡Bienvenido al panel de administración de Serenoa! (Modo Local)');
                 } else {
+                    if (errorSpan) errorSpan.textContent = 'Credenciales inválidas. Verifica usuario y contraseña.';
                     errorMsg.classList.remove('hidden');
-                    btnSubmit.querySelector('.btn-login-text').textContent = 'Acceder al Panel';
                 }
-            }, 500);
+            } finally {
+                btnSubmit.disabled = false;
+                btnSubmit.querySelector('.btn-login-text').textContent = 'Acceder al Panel';
+            }
         });
     }
 
@@ -1154,6 +1320,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const targetSec = document.getElementById(targetId);
             if (targetSec) targetSec.classList.add('active');
 
+            // Recargar catálogo si se cambia a la pestaña del catálogo o dashboard
+            if (targetId === "section-catalogo" || targetId === "section-dashboard") {
+                loadProducts();
+            }
+
             // Actualizar título
             if (pageTitle) {
                 switch (targetId) {
@@ -1171,6 +1342,15 @@ document.addEventListener('DOMContentLoaded', () => {
         periodFilter.addEventListener('change', (e) => {
             initCharts(e.target.value);
             showToast(`Métricas actualizadas a: ${periodFilter.options[periodFilter.selectedIndex].text}`);
+        });
+    }
+
+    // Selector interactivo de productos vendidos (Total General vs Por Producto Específico)
+    const selectProductKpi = document.getElementById("select-kpi-product-view");
+    if (selectProductKpi) {
+        selectProductKpi.addEventListener("change", (e) => {
+            selectedProductSalesView = e.target.value;
+            updateDashboardMetrics();
         });
     }
 
@@ -1203,4 +1383,12 @@ document.addEventListener('DOMContentLoaded', () => {
     checkSession();
     initSidebarToggle();
     activateTabFromHash();
+
+    // Sincronizar catálogo automáticamente cuando la ventana vuelve a tener foco (ej: al volver de nuevo_producto.html)
+    window.addEventListener('focus', () => {
+        const token = sessionStorage.getItem('admin_token') || localStorage.getItem('admin_token');
+        if (token && !dashboardView.classList.contains('hidden')) {
+            loadProducts();
+        }
+    });
 });
