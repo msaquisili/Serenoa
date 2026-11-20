@@ -18,5 +18,10 @@ package-lock.json.log
 # Archivos del sistema operativo y editores
 .DS_Store
 Thumbs.db
+desktop.ini
+*.ini
 .vscode/
 .idea/
+
+# Versión anterior (código legado no incluido en el repositorio)
+frontend_legacy/

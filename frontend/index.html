@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="es" class="scroll-smooth">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Favicon & Touch Icons -->
+    <link rel="icon" type="image/x-icon" href="/favicon.ico?v=3" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=3" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png?v=3" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=3" />
+    <link rel="shortcut icon" href="/favicon.ico?v=3" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+    <title>Serenoa | Pastelería Artesanal</title>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              'pastel-sage': '#99B4AA',
+              'pastel-olive': '#6B6D43',
+              'pastel-pistachio': '#ABA66F',
+              'pastel-terracotta': '#CF7D65',
+              'pastel-blush': '#E1B8A2',
+              'pastel-cream': '#F2DEC7',
+              'gold-bright': '#D4AF37',
+              'gold-shimmer': '#ECC979',
+              'gold-light': '#FDF0CD',
+              'dark-green': '#565935',
+              'gold': '#D4AF37',
+              'cream': '#FAF6EF',
+              'cream-card': '#F7EFE4',
+              'text-dark': '#2E2A27',
+              'text-light': '#7A736B'
+            },
+            fontFamily: {
+              serif: ['"Playfair Display"', 'Georgia', 'serif'],
+              sans: ['"Plus Jakarta Sans"', 'system-ui', '-apple-system', 'sans-serif']
+            }
+          }
+        }
+      }
+    </script>
+  </head>
+  <body class="bg-cream font-sans text-text-dark w-full max-w-full overflow-x-hidden m-0 p-0 selection:bg-gold/20 selection:text-dark-green">
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

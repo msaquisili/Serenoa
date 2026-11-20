@@ -80,10 +80,21 @@ app.use((req, res, next) => {
 const path = require('path');
 const fs = require('fs');
 
-// Servir archivos estáticos del frontend (soporta tanto /frontend/... como rutas directas y raíz)
+// Servir archivos estáticos del frontend (React Vite build en dist, public y frontend general)
+app.use(express.static(path.join(__dirname, '../frontend/dist')));
+app.use(express.static(path.join(__dirname, '../frontend/public')));
 app.use('/frontend', express.static(path.join(__dirname, '../frontend')));
 app.use(express.static(path.join(__dirname, '../frontend')));
 app.use(express.static(path.join(__dirname, '..')));
+
+// Ruta explícita para favicon.ico
+app.get('/favicon.ico', (req, res) => {
+    const icoInDist = path.join(__dirname, '../frontend/dist/favicon.ico');
+    const icoInPublic = path.join(__dirname, '../frontend/public/favicon.ico');
+    if (fs.existsSync(icoInDist)) return res.sendFile(icoInDist);
+    if (fs.existsSync(icoInPublic)) return res.sendFile(icoInPublic);
+    res.status(204).end();
+});
 
 // ============================================================================
 // 2. RUTAS DE LA API Y VISTAS
@@ -115,24 +126,30 @@ app.post('/api/auth/login', authLimiter, (req, res) => {
 app.use('/api/productos', require('./routes/productRoutes'));
 app.use('/api/pedidos', require('./routes/orderRoutes'));
 
-// Ruta limpia para acceder al panel de administración escribiendo '/admin' en el navegador
-app.get('/admin', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/admin.html'));
+// Rutas del frontend (React SPA fallback)
+app.get(['/admin*', '/nuevo_producto*', '/nuevo-producto*'], (req, res) => {
+    const distIndex = path.join(__dirname, '../frontend/dist/index.html');
+    if (fs.existsSync(distIndex)) {
+        return res.sendFile(distIndex);
+    }
+    const legacyAdmin = path.join(__dirname, '../frontend_legacy/admin.html');
+    if (fs.existsSync(legacyAdmin)) {
+        return res.sendFile(legacyAdmin);
+    }
+    res.sendFile(path.join(__dirname, '../frontend/index.html'));
 });
 
-// Ruta limpia para acceder a la vista de nuevo/editar producto
-app.get(['/nuevo_producto', '/nuevo-producto'], (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/nuevo_producto.html'));
-});
-
-// Ruta raíz para servir el catálogo público de clientes (busca en raíz y en frontend)
+// Ruta raíz para servir la aplicación React
 app.get('/', (req, res) => {
+    const distIndex = path.join(__dirname, '../frontend/dist/index.html');
+    if (fs.existsSync(distIndex)) {
+        return res.sendFile(distIndex);
+    }
     const rootIndex = path.join(__dirname, '../index.html');
-    const frontendIndex = path.join(__dirname, '../frontend/index.html');
     if (fs.existsSync(rootIndex)) {
         return res.sendFile(rootIndex);
     }
-    return res.sendFile(frontendIndex);
+    return res.sendFile(path.join(__dirname, '../frontend/index.html'));
 });
 
 // Endpoint informativo de la API

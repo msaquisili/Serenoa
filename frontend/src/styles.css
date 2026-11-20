@@ -1,14 +1,25 @@
 :root {
-    /* Paleta de colores basada en la referencia */
-    --bg-cream: #F5F0E6;
-    --dark-green: #1A3628;
-    --gold: #A87E50;
-    --gold-light: #C49F6A;
-    --text-dark: #333333;
-    --text-light: #666666;
+    /* Paleta de Colores Pasteles & Acentos Dorados Brillantes */
+    --bg-cream: #FAF6EF;
+    --pastel-cream: #F2DEC7;
+    --pastel-blush: #E1B8A2;
+    --pastel-terracotta: #CF7D65;
+    --pastel-sage: #99B4AA;
+    --pastel-olive: #6B6D43;
+    --pastel-pistachio: #ABA66F;
+    
+    --gold: #D4AF37;
+    --gold-bright: #F5CE68;
+    --gold-shimmer: #ECC979;
+    --gold-light: #FDF0CD;
+    --gold-border: rgba(212, 175, 55, 0.45);
+    
+    --dark-green: #565935;
+    --text-dark: #2E2A27;
+    --text-light: #7A736B;
     --white: #FFFFFF;
     --error: #e63946;
-    --success: #2a9d8f;
+    --success: #99B4AA;
     
     /* Tipografías */
     --font-serif: 'Playfair Display', serif;
@@ -33,10 +44,33 @@ html, body {
 
 h1, h2, h3, .brand, .subtitle { font-family: var(--font-serif); }
 
+/* UTILIDADES DE BRILLO DORADO Y PALETA PASTEL */
+.gold-shimmer-bg {
+    background: linear-gradient(135deg, #FDF0CD 0%, #ECC979 35%, #D4AF37 75%, #B8860B 100%);
+}
+.gold-shimmer-text {
+    background: linear-gradient(135deg, #B8860B 0%, #D4AF37 40%, #ECC979 70%, #B8860B 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+.gold-border-glow {
+    border: 1.5px solid #ECC979;
+    box-shadow: 0 4px 14px rgba(212, 175, 55, 0.25);
+}
+.pastel-btn-terracotta {
+    background: linear-gradient(135deg, #DE8B74 0%, #CF7D65 100%);
+    box-shadow: 0 4px 14px rgba(207, 125, 101, 0.3);
+    border: 1px solid rgba(236, 201, 121, 0.5);
+}
+.pastel-btn-terracotta:hover {
+    background: linear-gradient(135deg, #CF7D65 0%, #BF6D55 100%);
+    box-shadow: 0 6px 18px rgba(207, 125, 101, 0.4);
+}
+
 /* NAVEGACIÓN */
 .navbar { 
     display: flex; justify-content: space-between; align-items: center; 
-    padding: 1.5rem 5%; background: transparent; 
+    padding: 0; background: transparent; 
 }
 .brand { font-size: 2rem; font-weight: 700; color: var(--dark-green); letter-spacing: -0.5px; }
 .nav-links { display: flex; gap: 2rem; }
