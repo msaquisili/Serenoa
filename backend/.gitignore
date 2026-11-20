@@ -1,0 +1,12 @@
+# Node.js
+node_modules/
+
+# Variables de entorno y secretos
+.env
+.env.local
+.dev.vars
+.dev.vars.*
+
+# Wrangler / Cloudflare
+.wrangler/
+.wrangler_xdg/

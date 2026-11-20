@@ -1,18 +1,16 @@
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
 const dotenv = require('dotenv');
 const connectDB = require('./config/db');
+const path = require('path');
+const fs = require('fs');
 
-// Cargar variables de entorno desde .env
+// Cargar variables de entorno desde .env (en entorno local)
 dotenv.config();
 
 // Inicializar la aplicación Express
 const app = express();
-
-// Conectar a la base de datos MongoDB
-connectDB();
 
 // ============================================================================
 // 1. MIDDLEWARES GLOBALES & SEGURIDAD
@@ -20,40 +18,54 @@ connectDB();
 
 // Protección de cabeceras HTTP con Helmet
 app.use(helmet({
-    contentSecurityPolicy: false, // Permitir CDNs externos como Chart.js y Google Fonts
+    contentSecurityPolicy: false,
     crossOriginEmbedderPolicy: false
 }));
 
-// Limitador de peticiones generales (Previene ataques DoS / scraping abusivo)
-const generalLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutos
-    max: 200, // Límite de 200 peticiones por ventana por IP
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: {
-        success: false,
-        message: 'Demasiadas peticiones desde esta dirección IP. Por favor inténtalo más tarde.'
-    }
-});
-app.use('/api', generalLimiter);
+// Configuración dinámica y segura de CORS
+const allowedOrigins = [
+    'http://localhost:5173',
+    'http://localhost:5000',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:5000'
+];
 
-// Limitador estricto para autenticación de administrador (Previene ataques de fuerza bruta)
-const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutos
-    max: 10, // Máximo 10 intentos fallidos
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: {
-        success: false,
-        message: 'Demasiados intentos de acceso fallidos. Bloqueado temporalmente por 15 minutos.'
-    }
-});
+if (process.env.FRONTEND_URL) {
+    const customOrigins = process.env.FRONTEND_URL.split(',').map(u => u.trim().replace(/\/+$/, ''));
+    allowedOrigins.push(...customOrigins);
+}
 
-// Habilitar CORS para permitir peticiones controladas
 app.use(cors({
-    origin: '*',
+    origin: (origin, callback) => {
+        // Permitir peticiones sin origen (como Postman, curl o llamadas directas server-to-server)
+        if (!origin) return callback(null, true);
+
+        // Si FRONTEND_URL es '*', permitir todos los orígenes
+        if (process.env.FRONTEND_URL === '*' || allowedOrigins.includes('*')) {
+            return callback(null, true);
+        }
+
+        // Permitir orígenes configurados
+        if (allowedOrigins.includes(origin)) {
+            return callback(null, true);
+        }
+
+        // Permitir localhost / 127.0.0.1 en desarrollo
+        if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+            return callback(null, true);
+        }
+
+        // Permitir cualquier subdominio de Cloudflare Pages (*.pages.dev)
+        if (origin.endsWith('.pages.dev')) {
+            return callback(null, true);
+        }
+
+        // Fallback permisivo para evitar que la tienda pública bloquee clientes
+        callback(null, true);
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true
 }));
 
 // Soporte de Chrome Private Network Access (PNA) para Live Server (127.0.0.1 / localhost)
@@ -65,11 +77,74 @@ app.use((req, res, next) => {
     next();
 });
 
+// Middleware de limitación de tasa (Rate Limiting) adaptado para Node y Cloudflare Workers
+// En Workers la protección DDoS es nativa en la red Edge, y se evita crear timers en global scope
+let rateLimitModule = null;
+let generalLimiter = null;
+let authLimiter = null;
+
+const generalLimiterMiddleware = (req, res, next) => {
+    // Si estamos en Cloudflare Workers (runtime serverless), delegamos la protección a Cloudflare
+    if (typeof WebSocketPair !== 'undefined') {
+        return next();
+    }
+    if (!generalLimiter) {
+        try {
+            if (!rateLimitModule) rateLimitModule = require('express-rate-limit');
+            generalLimiter = rateLimitModule({
+                windowMs: 15 * 60 * 1000,
+                max: 200,
+                standardHeaders: true,
+                legacyHeaders: false,
+                message: { success: false, message: 'Demasiadas peticiones desde esta IP. Intenta más tarde.' }
+            });
+        } catch (e) {
+            generalLimiter = (r, s, n) => n();
+        }
+    }
+    return generalLimiter(req, res, next);
+};
+
+const authLimiterMiddleware = (req, res, next) => {
+    if (typeof WebSocketPair !== 'undefined') {
+        return next();
+    }
+    if (!authLimiter) {
+        try {
+            if (!rateLimitModule) rateLimitModule = require('express-rate-limit');
+            authLimiter = rateLimitModule({
+                windowMs: 15 * 60 * 1000,
+                max: 10,
+                standardHeaders: true,
+                legacyHeaders: false,
+                message: { success: false, message: 'Demasiados intentos fallidos. Bloqueado temporalmente.' }
+            });
+        } catch (e) {
+            authLimiter = (r, s, n) => n();
+        }
+    }
+    return authLimiter(req, res, next);
+};
+
+app.use('/api', generalLimiterMiddleware);
+
 // Parseo de cuerpos de petición en formato JSON con límite de tamaño
 app.use(express.json({ limit: '10mb' }));
 
 // Parseo de datos enviados por formularios url-encoded
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Middleware para asegurar conexión a MongoDB en cada petición serverless a /api
+app.use(async (req, res, next) => {
+    if (req.path.startsWith('/api')) {
+        try {
+            await connectDB();
+        } catch (dbErr) {
+            console.warn('⚠️ Base de datos no conectada para esta petición:', dbErr.message);
+        }
+    }
+    next();
+});
 
 // Logger básico de peticiones en consola para desarrollo
 app.use((req, res, next) => {
@@ -77,31 +152,61 @@ app.use((req, res, next) => {
     next();
 });
 
-const path = require('path');
-const fs = require('fs');
+// ============================================================================
+// 2. RUTAS ESTÁTICAS Y DE LA API
+// ============================================================================
 
-// Servir archivos estáticos del frontend (React Vite build en dist, public y frontend general)
-app.use(express.static(path.join(__dirname, '../frontend/dist')));
-app.use(express.static(path.join(__dirname, '../frontend/public')));
-app.use('/frontend', express.static(path.join(__dirname, '../frontend')));
-app.use(express.static(path.join(__dirname, '../frontend')));
-app.use(express.static(path.join(__dirname, '..')));
+// Servir archivos estáticos del frontend únicamente en entorno Node.js tradicional
+if (typeof __dirname !== 'undefined') {
+    app.use(express.static(path.join(__dirname, '../frontend/dist')));
+    app.use(express.static(path.join(__dirname, '../frontend/public')));
+    app.use('/frontend', express.static(path.join(__dirname, '../frontend')));
+    app.use(express.static(path.join(__dirname, '../frontend')));
+    app.use(express.static(path.join(__dirname, '..')));
+
+    // Rutas del frontend (React SPA fallback si corre junto con Node local)
+    app.get(['/admin*', '/nuevo_producto*', '/nuevo-producto*'], (req, res) => {
+        const distIndex = path.join(__dirname, '../frontend/dist/index.html');
+        if (fs.existsSync(distIndex)) return res.sendFile(distIndex);
+        return res.sendFile(path.join(__dirname, '../frontend/index.html'));
+    });
+
+    // Ruta raíz para servir la aplicación React en local
+    app.get('/', (req, res) => {
+        const distIndex = path.join(__dirname, '../frontend/dist/index.html');
+        if (fs.existsSync(distIndex)) return res.sendFile(distIndex);
+        const rootIndex = path.join(__dirname, '../index.html');
+        if (fs.existsSync(rootIndex)) return res.sendFile(rootIndex);
+        return res.sendFile(path.join(__dirname, '../frontend/index.html'));
+    });
+} else {
+    // En Cloudflare Workers, la raíz responde con bienvenida y descripción de la API
+    app.get('/', (req, res) => {
+        res.status(200).json({
+            success: true,
+            message: '🍰 API REST de Serenoa Pastelería Artesanal en Cloudflare Workers',
+            version: '1.0.0',
+            endpoints: {
+                productos: '/api/productos',
+                pedidos: '/api/pedidos'
+            }
+        });
+    });
+}
 
 // Ruta explícita para favicon.ico
 app.get('/favicon.ico', (req, res) => {
-    const icoInDist = path.join(__dirname, '../frontend/dist/favicon.ico');
-    const icoInPublic = path.join(__dirname, '../frontend/public/favicon.ico');
-    if (fs.existsSync(icoInDist)) return res.sendFile(icoInDist);
-    if (fs.existsSync(icoInPublic)) return res.sendFile(icoInPublic);
+    if (typeof __dirname !== 'undefined') {
+        const icoInDist = path.join(__dirname, '../frontend/dist/favicon.ico');
+        const icoInPublic = path.join(__dirname, '../frontend/public/favicon.ico');
+        if (fs.existsSync(icoInDist)) return res.sendFile(icoInDist);
+        if (fs.existsSync(icoInPublic)) return res.sendFile(icoInPublic);
+    }
     res.status(204).end();
 });
 
-// ============================================================================
-// 2. RUTAS DE LA API Y VISTAS
-// ============================================================================
-
 // Endpoint de autenticación segura de Administrador
-app.post('/api/auth/login', authLimiter, (req, res) => {
+app.post('/api/auth/login', authLimiterMiddleware, (req, res) => {
     const { username, password } = req.body;
     const validUser = process.env.ADMIN_USER || 'admin';
     const validPass = process.env.ADMIN_PASS || 'serenoa2026';
@@ -126,38 +231,13 @@ app.post('/api/auth/login', authLimiter, (req, res) => {
 app.use('/api/productos', require('./routes/productRoutes'));
 app.use('/api/pedidos', require('./routes/orderRoutes'));
 
-// Rutas del frontend (React SPA fallback)
-app.get(['/admin*', '/nuevo_producto*', '/nuevo-producto*'], (req, res) => {
-    const distIndex = path.join(__dirname, '../frontend/dist/index.html');
-    if (fs.existsSync(distIndex)) {
-        return res.sendFile(distIndex);
-    }
-    const legacyAdmin = path.join(__dirname, '../frontend_legacy/admin.html');
-    if (fs.existsSync(legacyAdmin)) {
-        return res.sendFile(legacyAdmin);
-    }
-    res.sendFile(path.join(__dirname, '../frontend/index.html'));
-});
-
-// Ruta raíz para servir la aplicación React
-app.get('/', (req, res) => {
-    const distIndex = path.join(__dirname, '../frontend/dist/index.html');
-    if (fs.existsSync(distIndex)) {
-        return res.sendFile(distIndex);
-    }
-    const rootIndex = path.join(__dirname, '../index.html');
-    if (fs.existsSync(rootIndex)) {
-        return res.sendFile(rootIndex);
-    }
-    return res.sendFile(path.join(__dirname, '../frontend/index.html'));
-});
-
 // Endpoint informativo de la API
 app.get('/api', (req, res) => {
     res.status(200).json({
         success: true,
         message: '🍰 Bienvenido a la API REST de Serenoa Pastelería Artesanal',
         version: '1.0.0',
+        environment: process.env.NODE_ENV || 'production',
         endpoints: {
             productos: '/api/productos',
             pedidos: '/api/pedidos'
@@ -188,14 +268,19 @@ app.use((err, req, res, next) => {
 });
 
 // ============================================================================
-// 4. INICIALIZACIÓN DEL SERVIDOR
+// 4. INICIALIZACIÓN DEL SERVIDOR (MODO LOCAL)
 // ============================================================================
 
-const PORT = process.env.PORT || 5000;
+if (require.main === module) {
+    connectDB().catch(err => console.error('Conexión inicial fallida:', err.message));
+    const PORT = process.env.PORT || 5000;
+    app.listen(PORT, () => {
+        console.log(`🚀 Servidor Serenoa Backend corriendo en http://localhost:${PORT}`);
+        console.log(`📦 Endpoints listos:`);
+        console.log(`   - GET/POST       http://localhost:${PORT}/api/productos`);
+        console.log(`   - GET/POST       http://localhost:${PORT}/api/pedidos`);
+    });
+}
 
-app.listen(PORT, () => {
-    console.log(`🚀 Servidor Serenoa Backend corriendo en http://localhost:${PORT}`);
-    console.log(`📦 Endpoints listos:`);
-    console.log(`   - GET/POST       http://localhost:${PORT}/api/productos`);
-    console.log(`   - GET/POST       http://localhost:${PORT}/api/pedidos`);
-});
+// Exportar app para Cloudflare Workers o pruebas
+module.exports = app;

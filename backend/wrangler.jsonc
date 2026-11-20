@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "serenoa-backend",
+  "main": "worker.js",
+  "compatibility_date": "2026-11-20",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "alias": {
+    "mongoose": "./node_modules/mongoose/index.js"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

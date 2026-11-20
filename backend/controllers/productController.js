@@ -1,4 +1,5 @@
-const Product = require('../models/Product');
+const ProductRaw = require('../models/Product');
+const Product = (ProductRaw && typeof ProductRaw.find === 'function') ? ProductRaw : (ProductRaw.default || ProductRaw);
 
 /**
  * @desc    Obtener todos los productos / pasteles

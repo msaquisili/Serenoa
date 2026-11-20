@@ -1,6 +1,9 @@
 const mongoose = require('mongoose');
-const Order = require('../models/Order');
-const Product = require('../models/Product');
+const OrderRaw = require('../models/Order');
+const ProductRaw = require('../models/Product');
+
+const Order = (OrderRaw && typeof OrderRaw.find === 'function') ? OrderRaw : (OrderRaw.default || OrderRaw);
+const Product = (ProductRaw && typeof ProductRaw.find === 'function') ? ProductRaw : (ProductRaw.default || ProductRaw);
 
 /**
  * @desc    Crear un nuevo pedido desde el catálogo / cliente

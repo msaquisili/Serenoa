@@ -4,6 +4,16 @@
 .env.*.local
 *.env
 backend/.env
+.dev.vars
+.dev.vars.*
+backend/.dev.vars
+backend/.dev.vars.*
+
+# Cloudflare Workers / Wrangler build artifacts
+.wrangler/
+backend/.wrangler/
+.wrangler_xdg/
+backend/.wrangler_xdg/
 
 # Dependencias de Node.js
 node_modules/

@@ -1,4 +1,5 @@
-const mongoose = require('mongoose');
+const mongooseRaw = require('mongoose');
+const mongoose = mongooseRaw.default || mongooseRaw;
 
 const productSchema = new mongoose.Schema(
     {
@@ -55,4 +56,9 @@ productSchema.virtual('desc').get(function () {
 productSchema.set('toJSON', { virtuals: true });
 productSchema.set('toObject', { virtuals: true });
 
-module.exports = mongoose.model('Product', productSchema);
+const Product = (mongoose.models && mongoose.models.Product)
+    ? mongoose.models.Product
+    : mongoose.model('Product', productSchema);
+
+module.exports = Product;
+module.exports.default = Product;

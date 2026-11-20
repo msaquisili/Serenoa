@@ -1,4 +1,5 @@
-const mongoose = require('mongoose');
+const mongooseRaw = require('mongoose');
+const mongoose = mongooseRaw.default || mongooseRaw;
 
 const orderItemSchema = new mongoose.Schema(
     {
@@ -93,4 +94,9 @@ const orderSchema = new mongoose.Schema(
     }
 );
 
-module.exports = mongoose.model('Order', orderSchema);
+const Order = (mongoose.models && mongoose.models.Order)
+    ? mongoose.models.Order
+    : mongoose.model('Order', orderSchema);
+
+module.exports = Order;
+module.exports.default = Order;

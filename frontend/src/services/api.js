@@ -5,15 +5,36 @@
  */
 
 export const getApiBaseUrl = () => {
+  const envUrl = import.meta.env?.VITE_API_URL;
+  if (envUrl && typeof envUrl === 'string' && envUrl.trim() !== '') {
+    // Normalizar eliminando cualquier barra final para evitar duplicaciones
+    return envUrl.trim().replace(/\/+$/, '');
+  }
   if (typeof window === 'undefined') return 'http://localhost:5000';
-  // Si estamos en Vite dev server (puerto 5173), podemos usar la ruta relativa con proxy '/api' o http://localhost:5000
-  if (window.location.port === '5173') return '';
+  if (window.location.port === '5173') return 'http://localhost:5000';
   if (window.location.origin && window.location.origin.includes(':5000')) return '';
   const host = window.location.hostname || 'localhost';
   return `${window.location.protocol}//${host}:5000`;
 };
 
 export const API_BASE_URL = getApiBaseUrl();
+
+/**
+ * Genera la lista ordenada de URLs a probar para cada petición
+ */
+export const getEndpointsToTry = (path) => {
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  const base = getApiBaseUrl();
+  const list = [];
+  if (base) {
+    list.push(`${base}${cleanPath}`);
+  }
+  list.push(cleanPath);
+  if (base !== 'http://localhost:5000') {
+    list.push(`http://localhost:5000${cleanPath}`);
+  }
+  return [...new Set(list)];
+};
 
 export const DEFAULT_PRODUCTS = [
   {
@@ -160,20 +181,7 @@ export const setCachedProducts = (products) => {
  * Petición de productos desde el backend con timeout y fallback
  */
 export const fetchProducts = async () => {
-  const isGitHubPages = typeof window !== 'undefined' && 
-    (window.location.hostname.includes('github.io') || (window.location.protocol === 'https:' && !window.location.hostname.includes('localhost')));
-
-  if (isGitHubPages) {
-    return getCachedProducts();
-  }
-
-  const urlsToTry = [
-    '/api/productos',
-    `${getApiBaseUrl()}/api/productos`,
-    'http://127.0.0.1:5000/api/productos',
-    'http://localhost:5000/api/productos'
-  ];
-  const uniqueUrls = [...new Set(urlsToTry)];
+  const uniqueUrls = getEndpointsToTry('/api/productos');
 
   for (const url of uniqueUrls) {
     try {
@@ -202,9 +210,8 @@ export const fetchProducts = async () => {
  * Guardar o actualizar producto
  */
 export const saveProduct = async (productData, id = null) => {
-  const urlsToTry = id 
-    ? [`/api/productos/${id}`, `${getApiBaseUrl()}/api/productos/${id}`, `http://localhost:5000/api/productos/${id}`]
-    : ['/api/productos', `${getApiBaseUrl()}/api/productos`, 'http://localhost:5000/api/productos'];
+  const path = id ? `/api/productos/${id}` : '/api/productos';
+  const urlsToTry = getEndpointsToTry(path);
   
   const method = id ? 'PUT' : 'POST';
 
@@ -244,11 +251,7 @@ export const saveProduct = async (productData, id = null) => {
  * Eliminar producto
  */
 export const deleteProduct = async (id) => {
-  const urlsToTry = [
-    `/api/productos/${id}`,
-    `${getApiBaseUrl()}/api/productos/${id}`,
-    `http://localhost:5000/api/productos/${id}`
-  ];
+  const urlsToTry = getEndpointsToTry(`/api/productos/${id}`);
 
   for (const url of urlsToTry) {
     try {
@@ -268,11 +271,7 @@ export const deleteProduct = async (id) => {
  * Crear un nuevo pedido (Admin / Tienda)
  */
 export const createOrder = async (orderData) => {
-  const urlsToTry = [
-    '/api/pedidos',
-    `${getApiBaseUrl()}/api/pedidos`,
-    'http://localhost:5000/api/pedidos'
-  ];
+  const urlsToTry = getEndpointsToTry('/api/pedidos');
 
   for (const url of urlsToTry) {
     try {
@@ -305,11 +304,7 @@ export const createOrder = async (orderData) => {
  * Obtener pedidos
  */
 export const fetchOrders = async () => {
-  const urlsToTry = [
-    '/api/pedidos',
-    `${getApiBaseUrl()}/api/pedidos`,
-    'http://localhost:5000/api/pedidos'
-  ];
+  const urlsToTry = getEndpointsToTry('/api/pedidos');
 
   for (const url of urlsToTry) {
     try {
@@ -376,11 +371,7 @@ export const fetchOrders = async () => {
  * Actualizar estado de pedido
  */
 export const updateOrderStatus = async (orderId, nuevoEstado) => {
-  const urlsToTry = [
-    `/api/pedidos/${orderId}`,
-    `${getApiBaseUrl()}/api/pedidos/${orderId}`,
-    `http://localhost:5000/api/pedidos/${orderId}`
-  ];
+  const urlsToTry = getEndpointsToTry(`/api/pedidos/${orderId}`);
 
   for (const url of urlsToTry) {
     try {
@@ -407,11 +398,7 @@ export const updateOrderStatus = async (orderId, nuevoEstado) => {
  * Login de Administrador
  */
 export const loginAdmin = async (username, password) => {
-  const urlsToTry = [
-    '/api/auth/login',
-    `${getApiBaseUrl()}/api/auth/login`,
-    'http://localhost:5000/api/auth/login'
-  ];
+  const urlsToTry = getEndpointsToTry('/api/auth/login');
 
   for (const url of urlsToTry) {
     try {
