@@ -4,17 +4,28 @@
  * Con soporte para Stale-While-Revalidate y fallback a LocalStorage
  */
 
+const isLocalEnvironment = () => {
+  if (typeof window === 'undefined') return false;
+  const hostname = window.location.hostname;
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+};
+
 export const getApiBaseUrl = () => {
   const envUrl = import.meta.env?.VITE_API_URL;
   if (envUrl && typeof envUrl === 'string' && envUrl.trim() !== '') {
     // Normalizar eliminando cualquier barra final para evitar duplicaciones
     return envUrl.trim().replace(/\/+$/, '');
   }
-  if (typeof window === 'undefined') return 'http://localhost:5000';
-  if (window.location.port === '5173') return 'http://localhost:5000';
-  if (window.location.origin && window.location.origin.includes(':5000')) return '';
-  const host = window.location.hostname || 'localhost';
-  return `${window.location.protocol}//${host}:5000`;
+
+  // Si estamos en entorno de desarrollo local (localhost / 127.0.0.1)
+  if (isLocalEnvironment()) {
+    if (typeof window !== 'undefined' && window.location.port === '5000') return '';
+    return 'http://localhost:5000';
+  }
+
+  // En producción (Cloudflare Pages u otro dominio público):
+  // NUNCA devolver localhost para evitar advertencias de Chrome Private Network Access (PNA)
+  return '';
 };
 
 export const API_BASE_URL = getApiBaseUrl();
@@ -26,14 +37,22 @@ export const getEndpointsToTry = (path) => {
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
   const base = getApiBaseUrl();
   const list = [];
+
   if (base) {
     list.push(`${base}${cleanPath}`);
   }
-  list.push(cleanPath);
-  if (base !== 'http://localhost:5000') {
+
+  // Si no hay base configurada o si estamos en local, permitir ruta relativa
+  if (!base || isLocalEnvironment()) {
+    list.push(cleanPath);
+  }
+
+  // ÚNICAMENTE en desarrollo local permitimos fallback a localhost:5000
+  if (isLocalEnvironment() && base !== 'http://localhost:5000') {
     list.push(`http://localhost:5000${cleanPath}`);
   }
-  return [...new Set(list)];
+
+  return [...new Set(list.filter(Boolean))];
 };
 
 export const DEFAULT_PRODUCTS = [

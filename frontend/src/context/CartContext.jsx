@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { createOrder } from '../services/api';
 
 const CartContext = createContext();
 
@@ -99,26 +100,22 @@ export const CartProvider = ({ children }) => {
 
     const encodedUrl = `https://wa.me/${WHATSAPP_PHONE}?text=${encodeURIComponent(message)}`;
 
-    // Registrar pedido en el backend si está activo
+    // Registrar pedido en el backend si está activo (usando la API centralizada con VITE_API_URL)
     try {
-      fetch('/api/pedidos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cliente: {
-            nombre: 'Cliente Web / WhatsApp',
-            telefono: `+${WHATSAPP_PHONE}`,
-            metodoPago: 'WhatsApp / Transferencia'
-          },
-          productos: cart.map(i => ({
-            producto: i.id && i.id.startsWith('prod-') ? null : i.id,
-            nombre: i.nombre,
-            cantidad: i.cantidad,
-            precioUnitario: i.precio
-          })),
-          total: Number(total),
-          notas: 'Pedido originado desde el carrito web con botón de WhatsApp.'
-        })
+      createOrder({
+        cliente: {
+          nombre: 'Cliente Web / WhatsApp',
+          telefono: `+${WHATSAPP_PHONE}`,
+          metodoPago: 'WhatsApp / Transferencia'
+        },
+        productos: cart.map(i => ({
+          producto: i.id && i.id.startsWith('prod-') ? null : i.id,
+          nombre: i.nombre,
+          cantidad: i.cantidad,
+          precioUnitario: i.precio
+        })),
+        total: Number(total),
+        notas: 'Pedido originado desde el carrito web con botón de WhatsApp.'
       }).catch(err => console.log('Registro asíncrono:', err));
     } catch (e) {}
 
