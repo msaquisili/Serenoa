@@ -28,6 +28,10 @@ const orderItemSchema = new mongoose.Schema(
 
 const orderSchema = new mongoose.Schema(
     {
+        codigo: {
+            type: String,
+            trim: true
+        },
         cliente: {
             nombre: {
                 type: String,
@@ -71,7 +75,7 @@ const orderSchema = new mongoose.Schema(
         },
         estado: {
             type: String,
-            enum: ['Pendiente', 'Pagado', 'En preparación', 'Entregado', 'Cancelado'],
+            enum: ['Pendiente', 'Pagado', 'En preparación', 'Entregado', 'Completado', 'Cancelado'],
             default: 'Pendiente'
         },
         estadoPago: {

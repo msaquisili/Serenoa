@@ -386,31 +386,92 @@ export const fetchOrders = async () => {
   ];
 };
 
+// Helpers para sincronización reactiva de pedidos en LocalStorage
+const syncLocalOrderUpdate = (orderId, updatePayload) => {
+  try {
+    const orders = JSON.parse(localStorage.getItem('serenoa_orders') || '[]');
+    const idx = orders.findIndex(o => o._id === orderId || o.id === orderId || o.codigo === orderId);
+    if (idx !== -1) {
+      const current = orders[idx];
+      const mergedCliente = updatePayload.cliente
+        ? { ...(current.cliente || {}), ...updatePayload.cliente }
+        : { ...(current.cliente || {}) };
+      if (updatePayload.metodoPago) {
+        mergedCliente.metodoPago = updatePayload.metodoPago;
+      }
+      orders[idx] = {
+        ...current,
+        ...updatePayload,
+        cliente: mergedCliente,
+        metodoPago: updatePayload.metodoPago || mergedCliente.metodoPago || current.metodoPago
+      };
+      localStorage.setItem('serenoa_orders', JSON.stringify(orders));
+    }
+  } catch (e) {}
+};
+
+const syncLocalOrderDelete = (orderId) => {
+  try {
+    const orders = JSON.parse(localStorage.getItem('serenoa_orders') || '[]');
+    const filtered = orders.filter(o => o._id !== orderId && o.id !== orderId && o.codigo !== orderId);
+    localStorage.setItem('serenoa_orders', JSON.stringify(filtered));
+  } catch (e) {}
+};
+
 /**
- * Actualizar estado de pedido
+ * Actualizar pedido (Estado, Método de Pago, Cliente, Notas, etc.)
  */
-export const updateOrderStatus = async (orderId, nuevoEstado) => {
+export const updateOrder = async (orderId, updateData) => {
   const urlsToTry = getEndpointsToTry(`/api/pedidos/${orderId}`);
+  const payload = typeof updateData === 'string' ? { estado: updateData } : (updateData || {});
+
+  // Optimización reactiva: actualizar caché local inmediatamente
+  syncLocalOrderUpdate(orderId, payload);
 
   for (const url of urlsToTry) {
     try {
       const res = await fetch(url, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ estado: nuevoEstado })
+        body: JSON.stringify(payload)
       });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.data) {
+          syncLocalOrderUpdate(orderId, json.data);
+        }
+        return json;
+      }
+    } catch (err) {}
+  }
+
+  return { success: true, message: 'Pedido actualizado' };
+};
+
+/**
+ * Actualizar estado de pedido
+ */
+export const updateOrderStatus = async (orderId, nuevoEstado) => {
+  return await updateOrder(orderId, { estado: nuevoEstado });
+};
+
+/**
+ * Eliminar pedido
+ */
+export const deleteOrder = async (orderId) => {
+  const urlsToTry = getEndpointsToTry(`/api/pedidos/${orderId}`);
+
+  // Optimización reactiva: eliminar de caché local inmediatamente
+  syncLocalOrderDelete(orderId);
+
+  for (const url of urlsToTry) {
+    try {
+      const res = await fetch(url, { method: 'DELETE' });
       if (res.ok) return await res.json();
     } catch (err) {}
   }
 
-  // Fallback local
-  const orders = JSON.parse(localStorage.getItem('serenoa_orders') || '[]');
-  const idx = orders.findIndex(o => o._id === orderId || o.codigo === orderId);
-  if (idx !== -1) {
-    orders[idx].estado = nuevoEstado;
-    localStorage.setItem('serenoa_orders', JSON.stringify(orders));
-  }
-  return { success: true };
+  return { success: true, message: 'Pedido eliminado' };
 };
 
 /**

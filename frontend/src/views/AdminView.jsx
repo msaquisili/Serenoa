@@ -56,8 +56,8 @@ export default function AdminView({ onNavigateToStore }) {
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const [prods, ords] = await Promise.all([
         fetchProducts(),
@@ -68,7 +68,53 @@ export default function AdminView({ onNavigateToStore }) {
     } catch (err) {
       console.error('Error cargando datos de admin:', err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
+    }
+  };
+
+  // Actualización optimista de pedidos en memoria para feedback instantáneo
+  const handleOrderUpdated = (orderId, updatePayload) => {
+    setOrders(prev => prev.map(o => {
+      const match = o._id === orderId || o.id === orderId || o.codigo === orderId;
+      if (!match) return o;
+      const mergedCliente = updatePayload.cliente
+        ? { ...(o.cliente || {}), ...updatePayload.cliente }
+        : { ...(o.cliente || {}) };
+      if (updatePayload.metodoPago) {
+        mergedCliente.metodoPago = updatePayload.metodoPago;
+      }
+      return {
+        ...o,
+        ...updatePayload,
+        cliente: mergedCliente,
+        metodoPago: updatePayload.metodoPago || mergedCliente.metodoPago || o.metodoPago
+      };
+    }));
+
+    setSelectedOrder(prev => {
+      if (!prev) return null;
+      const match = prev._id === orderId || prev.id === orderId || prev.codigo === orderId;
+      if (!match) return prev;
+      const mergedCliente = updatePayload.cliente
+        ? { ...(prev.cliente || {}), ...updatePayload.cliente }
+        : { ...(prev.cliente || {}) };
+      if (updatePayload.metodoPago) {
+        mergedCliente.metodoPago = updatePayload.metodoPago;
+      }
+      return {
+        ...prev,
+        ...updatePayload,
+        cliente: mergedCliente,
+        metodoPago: updatePayload.metodoPago || mergedCliente.metodoPago || prev.metodoPago
+      };
+    });
+  };
+
+  // Eliminación optimista de pedidos en memoria para feedback instantáneo
+  const handleOrderDeleted = (orderId) => {
+    setOrders(prev => prev.filter(o => o._id !== orderId && o.id !== orderId && o.codigo !== orderId));
+    if (selectedOrder && (selectedOrder._id === orderId || selectedOrder.id === orderId || selectedOrder.codigo === orderId)) {
+      handleBackToList();
     }
   };
 
@@ -349,6 +395,8 @@ export default function AdminView({ onNavigateToStore }) {
             order={selectedOrder}
             onBack={handleBackToList}
             onStatusUpdated={loadData}
+            onOrderUpdated={handleOrderUpdated}
+            onOrderDeleted={handleOrderDeleted}
           />
         ) : (
           /* Vistas principales de cada pestaña */
@@ -368,6 +416,8 @@ export default function AdminView({ onNavigateToStore }) {
               <OrdersTable 
                 orders={orders} 
                 onOrdersUpdated={loadData}
+                onOrderUpdated={handleOrderUpdated}
+                onOrderDeleted={handleOrderDeleted}
                 onNewOrder={handleOpenNewOrder}
                 onViewOrderDetail={handleOpenOrderDetail}
               />

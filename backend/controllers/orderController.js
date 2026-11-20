@@ -45,8 +45,10 @@ const createOrder = async (req, res) => {
         });
 
         const finalTotal = total !== undefined ? Number(total) : calculatedTotal;
+        const finalCodigo = req.body.codigo || `SER-${Math.floor(1000 + Math.random() * 9000)}`;
 
         const newOrder = await Order.create({
+            codigo: finalCodigo,
             cliente: {
                 nombre: cliente.nombre,
                 email: cliente.email || '',
@@ -56,8 +58,8 @@ const createOrder = async (req, res) => {
             },
             productos: normalizedItems,
             total: finalTotal,
-            estado: 'Pendiente',
-            estadoPago: 'Pendiente',
+            estado: req.body.estado || 'Pendiente',
+            estadoPago: req.body.estadoPago || 'Pendiente',
             estadoLogistica: 'Por preparar',
             notas: notas || ''
         });
@@ -115,13 +117,19 @@ const getOrders = async (req, res) => {
 };
 
 /**
- * @desc    Obtener un pedido por ID
+ * @desc    Obtener un pedido por ID o Código
  * @route   GET /api/pedidos/:id
  * @access  Privado (Admin)
  */
 const getOrderById = async (req, res) => {
     try {
-        const order = await Order.findById(req.params.id);
+        let order = null;
+        if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+            order = await Order.findById(req.params.id);
+        }
+        if (!order) {
+            order = await Order.findOne({ codigo: req.params.id });
+        }
 
         if (!order) {
             return res.status(404).json({
@@ -144,13 +152,19 @@ const getOrderById = async (req, res) => {
 };
 
 /**
- * @desc    Actualizar el estado de un pedido (Estado general, Estado de Pago o Estado de Logística)
+ * @desc    Actualizar un pedido (Estado general, Método de Pago, Cliente, Total, etc.)
  * @route   PUT /api/pedidos/:id
  * @access  Privado (Admin)
  */
 const updateOrderStatus = async (req, res) => {
     try {
-        let order = await Order.findById(req.params.id);
+        let order = null;
+        if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+            order = await Order.findById(req.params.id);
+        }
+        if (!order) {
+            order = await Order.findOne({ codigo: req.params.id });
+        }
 
         if (!order) {
             return res.status(404).json({
@@ -159,24 +173,70 @@ const updateOrderStatus = async (req, res) => {
             });
         }
 
-        const { estado, estadoPago, estadoLogistica, cliente, notas } = req.body;
+        const { estado, estadoPago, estadoLogistica, cliente, notas, metodoPago, total, productos } = req.body;
 
-        // Actualizaciones dinámicas
-        if (estado) order.estado = estado;
+        // Normalizar y actualizar estado
+        if (estado) {
+            const st = String(estado).trim();
+            const lower = st.toLowerCase();
+            if (lower === 'pendiente') order.estado = 'Pendiente';
+            else if (lower === 'completado') order.estado = 'Completado';
+            else if (lower === 'cancelado') order.estado = 'Cancelado';
+            else if (lower === 'pagado') order.estado = 'Pagado';
+            else if (lower === 'en preparación' || lower === 'en preparacion') order.estado = 'En preparación';
+            else if (lower === 'entregado') order.estado = 'Entregado';
+            else order.estado = st;
+        }
+
         if (estadoPago) {
             order.estadoPago = estadoPago;
-            // Sincronizar estado general si se actualiza el pago
             if (!estado) order.estado = estadoPago;
         }
-        if (estadoLogistica) order.estadoLogistica = estadoLogistica;
-        if (cliente) order.cliente = { ...order.cliente, ...cliente };
-        if (notas !== undefined) order.notas = notas;
+
+        if (estadoLogistica) {
+            order.estadoLogistica = estadoLogistica;
+        }
+
+        // Actualizar información del cliente
+        if (cliente && typeof cliente === 'object') {
+            order.cliente = {
+                nombre: cliente.nombre !== undefined ? cliente.nombre : (order.cliente?.nombre || ''),
+                email: cliente.email !== undefined ? cliente.email : (order.cliente?.email || ''),
+                telefono: cliente.telefono !== undefined ? cliente.telefono : (order.cliente?.telefono || ''),
+                direccion: cliente.direccion !== undefined ? cliente.direccion : (order.cliente?.direccion || ''),
+                metodoPago: cliente.metodoPago !== undefined ? cliente.metodoPago : (order.cliente?.metodoPago || 'WhatsApp / Transferencia')
+            };
+        }
+
+        // Actualizar método de pago explícito (a nivel de cliente y/o raíz)
+        const newPaymentMethod = metodoPago || cliente?.metodoPago;
+        if (newPaymentMethod) {
+            if (!order.cliente) order.cliente = {};
+            order.cliente.metodoPago = newPaymentMethod;
+        }
+
+        if (total !== undefined && !isNaN(Number(total))) {
+            order.total = Number(total);
+        }
+
+        if (productos && Array.isArray(productos) && productos.length > 0) {
+            order.productos = productos.map(item => ({
+                producto: (item.producto && mongoose.Types.ObjectId.isValid(item.producto)) ? item.producto : null,
+                nombre: item.nombre || 'Postre Serenoa',
+                cantidad: Number(item.cantidad) || 1,
+                precioUnitario: Number(item.precioUnitario || item.precio) || 0
+            }));
+        }
+
+        if (notas !== undefined) {
+            order.notas = String(notas).trim();
+        }
 
         const updatedOrder = await order.save();
 
         res.status(200).json({
             success: true,
-            message: 'Estado del pedido actualizado exitosamente',
+            message: 'Pedido actualizado exitosamente',
             data: updatedOrder
         });
     } catch (error) {
@@ -195,7 +255,13 @@ const updateOrderStatus = async (req, res) => {
  */
 const deleteOrder = async (req, res) => {
     try {
-        const order = await Order.findById(req.params.id);
+        let order = null;
+        if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+            order = await Order.findById(req.params.id);
+        }
+        if (!order) {
+            order = await Order.findOne({ codigo: req.params.id });
+        }
 
         if (!order) {
             return res.status(404).json({
@@ -204,12 +270,12 @@ const deleteOrder = async (req, res) => {
             });
         }
 
-        await Order.findByIdAndDelete(req.params.id);
+        await Order.findByIdAndDelete(order._id);
 
         res.status(200).json({
             success: true,
             message: 'Pedido eliminado exitosamente',
-            data: { id: req.params.id }
+            data: { id: order._id, codigo: order.codigo }
         });
     } catch (error) {
         res.status(500).json({
