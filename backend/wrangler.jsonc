@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "serenoa-backend",
+  "name": "serenoa",
   "main": "worker.js",
   "compatibility_date": "2026-11-20",
   "compatibility_flags": [
@@ -11,5 +11,10 @@
   },
   "observability": {
     "enabled": true
+  },
+  "vars": {
+    "ADMIN_USER": "Ari",
+    "FRONTEND_URL": "https://serenoa.pages.dev",
+    "NODE_ENV": "production"
   }
 }
