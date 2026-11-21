@@ -642,6 +642,12 @@ h1, h2, h3, .brand, .subtitle { font-family: var(--font-serif); }
 }
 
 /* HERO SECTION (SPLIT LAYOUT) */
+@media (min-width: 768px) {
+  .hero-mask-desktop {
+    mask-image: linear-gradient(to right, transparent 0%, black 20%);
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, black 20%);
+  }
+}
 .hero { 
     display: flex; align-items: center; justify-content: space-between; 
     padding: 2rem 0 2rem 5%; min-height: 80vh; gap: 2rem;

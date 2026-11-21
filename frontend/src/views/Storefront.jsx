@@ -3,6 +3,7 @@ import ProductCard from '../components/ProductCard';
 import { fetchProducts, getAllCategories } from '../services/api';
 import heroCookiesImg from '../assets/hero-cookies.jpg';
 import logoSerenoa from '../assets/logo_serenoa_oficial.png';
+import contactCakesImg from '../assets/contact-cheesecakes.jpg';
 
 export default function Storefront({ 
   onNavigateToAdmin,
@@ -111,7 +112,7 @@ export default function Storefront({
   return (
     <div className="w-full min-h-screen bg-[#FAF6EF] flex flex-col justify-between">
       {/* NAVBAR NAVEGACIÓN PRINCIPAL */}
-      <header className="sticky top-0 z-40 w-full bg-[#FAF6EF]/95 backdrop-blur-md border-b border-[#ECC979]/35 transition-all duration-300">
+      <header className="sticky top-0 z-40 w-full bg-white/70 backdrop-blur-md border-b border-white/50 transition-all duration-300">
         <div className="w-full max-w-7xl mx-auto px-4 sm:px-8 lg:px-12 py-1.5 sm:py-2 flex items-center justify-between">
           {/* Logo Oficial de Serenoa (Fondo transparente) */}
           <div 
@@ -167,44 +168,50 @@ export default function Storefront({
       {/* VISTA 1: INICIO */}
       {currentView === 'inicio' && (
         <main className="w-full">
-          {/* HERO SECTION CON FONDO DE GALLETAS Y TRANSICIÓN SUAVE */}
-          <section id="inicio" className="hero fade-in relative w-full overflow-hidden bg-[#FAF6EF] min-h-[68vh] lg:min-h-[74vh] flex items-center">
-            {/* Imagen de fondo en el lado derecho con máscara de desvanecimiento suave hacia la izquierda */}
-            <div className="absolute top-0 right-0 h-full w-full lg:w-[60%] xl:w-[56%] pointer-events-none select-none z-0 overflow-hidden">
+          {/* HERO SECTION CON FONDO A PANTALLA COMPLETA Y TARJETA GLASSMORPHISM HORIZONTAL */}
+          <section id="inicio" className="fade-in relative w-full overflow-hidden bg-[#ECE3D8] min-h-[540px] lg:min-h-[600px] flex items-center">
+            {/* Luces ambientales suaves neutras (textura luminosa limpia sin manchas rojas) */}
+            <div className="absolute inset-0 pointer-events-none select-none z-0 overflow-hidden">
+              <div className="absolute rounded-full blur-3xl pointer-events-none bg-[#FBF7F0]/90 w-[420px] h-[420px] -top-20 -left-20"></div>
+              <div className="absolute rounded-full blur-3xl pointer-events-none bg-[#DECBB6]/60 w-[380px] h-[380px] bottom-0 left-[18%]"></div>
+              <div className="absolute rounded-full blur-3xl pointer-events-none bg-[#D7DEC9]/45 w-[320px] h-[320px] top-10 left-[22%]"></div>
+            </div>
+
+            {/* Foto principal nítida a la derecha con transición suave */}
+            <div className="absolute inset-0 md:left-auto md:right-0 md:w-[65%] lg:w-[62%] h-full pointer-events-none select-none z-0 overflow-hidden hero-mask-desktop">
               <img 
                 src={heroCookiesImg} 
                 alt="Galletas artesanales Serenoa"
-                className="w-full h-full object-cover object-center lg:object-left-center"
-                style={{
-                  maskImage: 'linear-gradient(to right, transparent 0%, rgba(0,0,0,0.1) 10%, rgba(0,0,0,0.5) 25%, rgba(0,0,0,0.9) 45%, black 65%)',
-                  WebkitMaskImage: 'linear-gradient(to right, transparent 0%, rgba(0,0,0,0.1) 10%, rgba(0,0,0,0.5) 25%, rgba(0,0,0,0.9) 45%, black 65%)'
-                }}
+                className="w-full h-full object-cover object-center md:object-left"
               />
-              {/* Capa de degradado lateral para integrar el fondo perfectamente con el color crema #FAF6EF */}
-              <div className="absolute inset-0 bg-gradient-to-r from-[#FAF6EF] via-[#FAF6EF]/60 sm:via-[#FAF6EF]/20 to-transparent lg:w-[40%]"></div>
-              {/* Degradado inferior/móvil para asegurar legibilidad en pantallas pequeñas */}
-              <div className="absolute inset-0 bg-gradient-to-t from-[#FAF6EF] via-[#FAF6EF]/85 to-transparent lg:hidden"></div>
+              {/* Overlay sutil para móvil */}
+              <div className="absolute inset-0 bg-black/5 md:bg-transparent pointer-events-none"></div>
             </div>
 
-            {/* Contenido del Hero sobre el fondo */}
-            <div className="relative z-10 w-full max-w-7xl mx-auto px-4 sm:px-8 lg:px-12 py-12 sm:py-18 lg:py-24 flex items-center">
-              <div className="hero-content w-full lg:w-1/2 flex flex-col items-center lg:items-start text-center lg:text-left justify-center pr-0 lg:pr-8">
-                <span className="subtitle font-serif italic text-[#CF7D65] text-sm sm:text-base lg:text-lg mb-2.5 tracking-wide font-medium">
+            {/* Contenedor y Tarjeta Glassmorphism Equilibrada */}
+            <div className="relative z-10 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-12 flex items-center justify-center md:justify-start">
+              <div className="w-full max-w-md md:max-w-[580px] mx-auto md:mx-0 md:ml-4 lg:ml-12 px-7 py-8 lg:px-10 lg:py-9 text-center md:text-left bg-[#FAF6F0]/55 backdrop-blur-xl border border-white/85 rounded-2xl shadow-[0_12px_35px_rgba(74,83,40,0.10)] transition-all">
+                <span 
+                  className="font-serif italic text-sm sm:text-base lg:text-lg mb-2.5 tracking-wide font-medium block !text-[#9A7422]"
+                  style={{ color: '#9A7422' }}
+                >
                   La vida es dulce, Serenoa ayuda
                 </span>
-                <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-serif font-bold text-[#2E2A27] leading-tight mb-4 tracking-tight">
-                  Dulces Momentos <br className="hidden sm:inline" />Empiezan Aquí.
+                <h1 className="text-4xl lg:text-[44px] leading-[1.12] font-serif font-bold text-[#3E4622] mb-3.5 tracking-tight">
+                  Dulces Momentos <br className="hidden md:block" />Empiezan Aquí.
                 </h1>
-                <p className="text-sm sm:text-base md:text-lg text-[#7A736B] max-w-md lg:max-w-lg mb-6 sm:mb-8 leading-relaxed">
+                <p className="text-xs sm:text-sm md:text-base text-[#3F3D38] mb-6 sm:mb-8 leading-relaxed font-normal max-w-lg">
                   Disfruta de pastelería artesanal y deliciosos postres hechos para alegrar tu día y calentar tu corazón.
                 </p>
-                <button 
-                  onClick={() => { setCurrentView('catalogo'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-                  className="inline-flex items-center gap-2 px-7 sm:px-9 py-3.5 sm:py-4 rounded-full bg-gradient-to-r from-[#CF7D65] to-[#DE8B74] hover:from-[#BF6D55] hover:to-[#CF7D65] text-white font-semibold text-xs sm:text-sm tracking-wide shadow-[0_6px_20px_rgba(207,125,101,0.35)] border border-[#ECC979]/60 active:scale-95 transition-all cursor-pointer"
-                >
-                  <span>EXPLORAR CATÁLOGO</span>
-                  <span className="arrow text-lg leading-none text-[#FDF0CD]">&gt;</span>
-                </button>
+                <div className="flex justify-center md:justify-start">
+                  <button 
+                    onClick={() => { setCurrentView('catalogo'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                    className="inline-flex items-center gap-2 px-7 sm:px-9 py-3.5 sm:py-4 rounded-full bg-gradient-to-r from-[#CF7D65] to-[#DE8B74] hover:from-[#BF6D55] hover:to-[#CF7D65] text-white font-semibold text-xs sm:text-sm tracking-wide shadow-[0_6px_20px_rgba(207,125,101,0.35)] border border-[#ECC979]/60 hover:brightness-95 active:scale-95 transition-all cursor-pointer"
+                  >
+                    <span>EXPLORAR CATÁLOGO</span>
+                    <span className="arrow text-lg leading-none text-[#FDF0CD]">&gt;</span>
+                  </button>
+                </div>
               </div>
             </div>
           </section>
@@ -267,7 +274,7 @@ export default function Storefront({
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 lg:gap-8 w-full">
-                {products.map(producto => (
+                {products.slice(0, 8).map(producto => (
                   <ProductCard key={producto.id} producto={producto} />
                 ))}
               </div>
@@ -284,69 +291,112 @@ export default function Storefront({
             </div>
           </section>
 
-          {/* SECCIÓN CONTACTO */}
-          <section id="contacto" className="py-16 sm:py-24 px-4 sm:px-8 w-full bg-[#FAF6EF]">
-            <div className="max-w-4xl mx-auto">
-              <div className="text-center mb-8 sm:mb-12">
-                <span className="subtitle font-serif italic text-[#CF7D65] text-sm sm:text-base block mb-1 font-medium">
-                  Estamos para servirte
-                </span>
-                <h2 className="text-2xl sm:text-3xl md:text-4xl font-serif font-bold text-[#2E2A27]">
-                  Contáctame
-                </h2>
-                <p className="text-xs sm:text-sm text-[#7A736B] mt-2">
-                  Haz tus consultas, pedidos personalizados para eventos o déjanos un mensaje.
-                </p>
-              </div>
+          {/* SECCIÓN CONTACTO (LAYOUT EDITORIAL 2 COLUMNAS + TARJETA GLASSMORPHISM) */}
+          <section id="contacto" className="relative overflow-hidden bg-[#F4EDE3] py-16 pb-24 lg:py-24">
+            {/* Brillos ambientales neutros muy sutiles para dar profundidad al cristal */}
+            <div className="pointer-events-none select-none">
+              <div className="pointer-events-none absolute rounded-full blur-3xl bg-[#FFFDF9]/80 w-[420px] h-[420px] -top-24 -left-16"></div>
+              <div className="pointer-events-none absolute rounded-full blur-3xl bg-[#E2D5C3]/55 w-[420px] h-[420px] -bottom-24 -right-16"></div>
+            </div>
 
-              <div className="bg-white rounded-2xl p-6 sm:p-10 shadow-sm border border-[#ECC979]/35 max-w-xl mx-auto">
-                {contactFeedback && (
-                  <div className="mb-4 p-3 bg-green-50 text-green-700 text-xs sm:text-sm rounded-lg border border-green-200">
-                    {contactFeedback}
+            {/* Contenedor centrado de 2 columnas */}
+            <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-10 items-stretch">
+                
+                {/* Columna Izquierda: Fotografía editorial + etiqueta flotante */}
+                <div className="relative rounded-3xl overflow-hidden shadow-[0_14px_35px_rgba(74,83,40,0.12)] h-72 sm:h-96 lg:h-auto lg:min-h-[540px]">
+                  <img 
+                    src={contactCakesImg} 
+                    alt="Pastelería y tortas artesanales Serenoa"
+                    className="w-full h-full object-cover object-center"
+                  />
+                  {/* Degradado inferior sutil para contraste */}
+                  <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/30 to-transparent pointer-events-none"></div>
+
+                  {/* Etiqueta flotante centrada abajo */}
+                  <div className="absolute bottom-5 left-1/2 -translate-x-1/2 w-[88%] sm:w-auto px-5 py-2.5 rounded-full bg-white/80 backdrop-blur-md border border-white/90 shadow-sm text-center">
+                    <span className="text-[#3E4622] text-xs sm:text-sm font-medium sm:whitespace-nowrap">
+                      Pedidos con mínimo 2 días de anticipación
+                    </span>
                   </div>
-                )}
-                <form onSubmit={handleContactSubmit} className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-[#2E2A27] mb-1">Nombre Completo</label>
-                    <input 
-                      type="text" 
-                      required
-                      value={contactForm.nombre}
-                      onChange={e => setContactForm({ ...contactForm, nombre: e.target.value })}
-                      placeholder="Ej: Sofía Morales"
-                      className="w-full px-4 py-2.5 rounded-lg border border-gray-200 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#1A3628]/20 focus:border-[#1A3628]"
-                    />
+                </div>
+
+                {/* Columna Derecha: Tarjeta Glassmorphism con el formulario */}
+                <div className="bg-white/65 backdrop-blur-xl border border-white/90 rounded-3xl p-7 sm:p-9 lg:p-10 shadow-[0_12px_35px_rgba(74,83,40,0.10)] flex flex-col justify-center">
+                  {/* Encabezado centrado */}
+                  <div className="text-center mb-6">
+                    <span className="font-serif italic text-[#555E34] text-base sm:text-lg block">
+                      Estamos para servirte
+                    </span>
+                    <h2 className="text-3xl sm:text-4xl font-serif font-bold text-[#3E4622] mt-1 tracking-tight">
+                      Contáctanos
+                    </h2>
+                    <p className="text-sm text-[#5A544C] mt-2 max-w-md mx-auto leading-relaxed">
+                      Haz tus consultas, pedidos personalizados para eventos o déjanos un mensaje.
+                    </p>
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-[#2E2A27] mb-1">Correo Electrónico</label>
-                    <input 
-                      type="email" 
-                      required
-                      value={contactForm.email}
-                      onChange={e => setContactForm({ ...contactForm, email: e.target.value })}
-                      placeholder="tu@email.com"
-                      className="w-full px-4 py-2.5 rounded-lg border border-gray-200 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#1A3628]/20 focus:border-[#1A3628]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-[#2E2A27] mb-1">Mensaje o Pedido Especial</label>
-                    <textarea 
-                      rows="4"
-                      required
-                      value={contactForm.mensaje}
-                      onChange={e => setContactForm({ ...contactForm, mensaje: e.target.value })}
-                      placeholder="¿En qué te podemos consentir hoy?"
-                      className="w-full px-4 py-2.5 rounded-lg border border-gray-200 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#1A3628]/20 focus:border-[#1A3628]"
-                    />
-                  </div>
-                  <button 
-                    type="submit"
-                    disabled={isSendingContact}
-                    className="w-full py-3 bg-gradient-to-r from-[#CF7D65] to-[#DE8B74] hover:from-[#BF6D55] hover:to-[#CF7D65] text-white rounded-full font-semibold text-xs sm:text-sm shadow-[0_4px_14px_rgba(207,125,101,0.3)] border border-[#ECC979]/50 transition-all cursor-pointer disabled:opacity-50 active:scale-95"
-                  >
-                    {isSendingContact ? 'Enviando...' : 'Enviar Mensaje'}
-                  </button>
-                </form>
+
+                  {/* Mensaje de feedback inline */}
+                  {contactFeedback && (
+                    <div className="mb-4 p-3.5 bg-[#E8EFE3] text-[#3E4622] text-xs sm:text-sm rounded-xl border border-[#C5D5BC] text-center font-medium shadow-xs">
+                      {contactFeedback}
+                    </div>
+                  )}
+
+                  {/* Formulario */}
+                  <form onSubmit={handleContactSubmit} className="space-y-4">
+                    <div>
+                      <label className="text-[#3E4622] text-sm font-medium mb-1.5 block">
+                        Nombre Completo
+                      </label>
+                      <input 
+                        type="text" 
+                        required
+                        value={contactForm.nombre}
+                        onChange={e => setContactForm({ ...contactForm, nombre: e.target.value })}
+                        placeholder="Ej: Sofía Morales"
+                        className="w-full rounded-xl bg-[#FAF6F0]/75 border border-[#D8CCBC] px-4 py-3 text-sm text-[#3E4622] placeholder:text-[#8E867B] focus:outline-none focus:border-[#D4826A] focus:ring-2 focus:ring-[#D4826A]/25 transition"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[#3E4622] text-sm font-medium mb-1.5 block">
+                        Correo Electrónico
+                      </label>
+                      <input 
+                        type="email" 
+                        required
+                        value={contactForm.email}
+                        onChange={e => setContactForm({ ...contactForm, email: e.target.value })}
+                        placeholder="tu@email.com"
+                        className="w-full rounded-xl bg-[#FAF6F0]/75 border border-[#D8CCBC] px-4 py-3 text-sm text-[#3E4622] placeholder:text-[#8E867B] focus:outline-none focus:border-[#D4826A] focus:ring-2 focus:ring-[#D4826A]/25 transition"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[#3E4622] text-sm font-medium mb-1.5 block">
+                        Mensaje o Pedido Especial
+                      </label>
+                      <textarea 
+                        rows="4"
+                        required
+                        value={contactForm.mensaje}
+                        onChange={e => setContactForm({ ...contactForm, mensaje: e.target.value })}
+                        placeholder="¿En qué podemos consentir hoy?"
+                        className="w-full rounded-xl bg-[#FAF6F0]/75 border border-[#D8CCBC] px-4 py-3 text-sm text-[#3E4622] placeholder:text-[#8E867B] focus:outline-none focus:border-[#D4826A] focus:ring-2 focus:ring-[#D4826A]/25 transition resize-none"
+                      />
+                    </div>
+
+                    <button 
+                      type="submit"
+                      disabled={isSendingContact}
+                      className="w-full rounded-full bg-[#D4826A] hover:brightness-95 text-white font-medium py-3.5 mt-2 shadow-sm transition cursor-pointer disabled:opacity-50 active:scale-95"
+                    >
+                      {isSendingContact ? 'Enviando...' : 'Enviar Mensaje'}
+                    </button>
+                  </form>
+                </div>
+
               </div>
             </div>
           </section>
@@ -440,7 +490,7 @@ export default function Storefront({
 
       {/* FOOTER */}
       <footer className="w-full bg-[#565935] text-white py-8 px-4 text-center text-xs text-[#F2DEC7]/80 border-t border-[#ECC979]/30">
-        <p>© 2026 Serenoa. Pastelería y Repostería de Autor. Todos los derechos reservados.</p>
+        <p>© 2026 Serenoa Pastelería | Desarrollado por Megan Saquisili Fuentes</p>
       </footer>
     </div>
   );
