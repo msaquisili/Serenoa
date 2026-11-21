@@ -3,6 +3,7 @@ import { CartProvider } from './context/CartContext';
 import Storefront from './views/Storefront';
 import AdminView from './views/AdminView';
 import FloatingCartButton from './components/FloatingCartButton';
+import Chatbot from './components/Chatbot';
 import CartDrawer from './components/CartDrawer';
 import './styles.css';
 
@@ -63,6 +64,7 @@ export default function App() {
         <>
           <Storefront currentView={storeTab} onNavigateTab={setStoreTab} />
           <FloatingCartButton />
+          <Chatbot onExploreCatalog={handleExploreCatalog} />
           <CartDrawer onExploreCatalog={handleExploreCatalog} />
         </>
       ) : (
