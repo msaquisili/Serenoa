@@ -32,6 +32,11 @@ const orderSchema = new mongoose.Schema(
             type: String,
             trim: true
         },
+        metodoPago: {
+            type: String,
+            enum: ['Transferencia', 'Efectivo'],
+            default: 'Transferencia'
+        },
         cliente: {
             nombre: {
                 type: String,
@@ -56,7 +61,8 @@ const orderSchema = new mongoose.Schema(
             },
             metodoPago: {
                 type: String,
-                default: 'WhatsApp / Transferencia'
+                enum: ['Transferencia', 'Efectivo'],
+                default: 'Transferencia'
             }
         },
         productos: {
@@ -75,7 +81,7 @@ const orderSchema = new mongoose.Schema(
         },
         estado: {
             type: String,
-            enum: ['Pendiente', 'Pagado', 'En preparación', 'Entregado', 'Completado', 'Cancelado'],
+            enum: ['Pendiente', 'Completado', 'Cancelado'],
             default: 'Pendiente'
         },
         estadoPago: {
@@ -97,6 +103,27 @@ const orderSchema = new mongoose.Schema(
         timestamps: true
     }
 );
+
+// Normalización automática antes de validar para garantizar compatibilidad con pedidos heredados
+orderSchema.pre('validate', function(next) {
+    if (this.estado) {
+        const s = String(this.estado).trim().toLowerCase();
+        if (s === 'completado' || s === 'entregado' || s === 'pagado') {
+            this.estado = 'Completado';
+        } else if (s === 'cancelado') {
+            this.estado = 'Cancelado';
+        } else {
+            this.estado = 'Pendiente';
+        }
+    }
+    const rawPay = String(this.metodoPago || this.cliente?.metodoPago || '').trim().toLowerCase();
+    const cleanPay = rawPay.includes('efectivo') ? 'Efectivo' : 'Transferencia';
+    this.metodoPago = cleanPay;
+    if (this.cliente) {
+        this.cliente.metodoPago = cleanPay;
+    }
+    next();
+});
 
 const Order = (mongoose.models && mongoose.models.Order)
     ? mongoose.models.Order

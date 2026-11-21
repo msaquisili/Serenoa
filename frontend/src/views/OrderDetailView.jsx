@@ -8,26 +8,38 @@ export default function OrderDetailView({
   onOrderUpdated, 
   onOrderDeleted 
 }) {
-  const [currentStatus, setCurrentStatus] = useState(order?.estado || 'Pendiente');
+  const normalizePayment = (raw) => {
+    const s = String(raw || '').toLowerCase();
+    return s.includes('efectivo') ? 'Efectivo' : 'Transferencia';
+  };
+
+  const normalizeStatus = (raw) => {
+    const s = String(raw || '').toLowerCase();
+    if (s === 'completado' || s === 'entregado' || s === 'pagado') return 'Completado';
+    if (s === 'cancelado') return 'Cancelado';
+    return 'Pendiente';
+  };
+
+  const [currentStatus, setCurrentStatus] = useState(normalizeStatus(order?.estado));
   const [currentMetodo, setCurrentMetodo] = useState(
-    order?.cliente?.metodoPago || order?.metodoPago || 'WhatsApp / Transferencia'
+    normalizePayment(order?.cliente?.metodoPago || order?.metodoPago)
   );
   const [isUpdating, setIsUpdating] = useState(false);
   const [feedbackNotice, setFeedbackNotice] = useState(null);
 
-  // Modal de edición
-  const [isEditing, setIsEditing] = useState(false);
+  // Modo de edición DIRECTO EN PÁGINA (Sin modals)
+  const [isEditingOnPage, setIsEditingOnPage] = useState(false);
   const [editForm, setEditForm] = useState({
     nombre: order?.cliente?.nombre || '',
     telefono: order?.cliente?.telefono || '',
-    metodoPago: order?.cliente?.metodoPago || order?.metodoPago || 'WhatsApp / Transferencia',
-    estado: order?.estado || 'Pendiente',
+    metodoPago: normalizePayment(order?.cliente?.metodoPago || order?.metodoPago),
+    estado: normalizeStatus(order?.estado),
     total: Number(order?.total || 0),
     notas: order?.notas || ''
   });
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
-  // Modal de eliminación
+  // ÚNICO MODAL PERMITIDO: Confirmación de eliminación
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -35,7 +47,7 @@ export default function OrderDetailView({
     return (
       <div className="bg-white p-8 rounded-2xl text-center space-y-4">
         <p className="text-gray-500 text-sm">No se ha seleccionado ningún pedido.</p>
-        <button onClick={onBack} className="px-4 py-2 bg-[#1A3628] text-white rounded-lg text-xs font-semibold cursor-pointer">
+        <button onClick={onBack} className="px-4 py-2 bg-[#565935] text-white rounded-lg text-xs font-semibold cursor-pointer">
           Volver a Pedidos
         </button>
       </div>
@@ -47,21 +59,22 @@ export default function OrderDetailView({
 
   const showNotice = (msg, type = 'success') => {
     setFeedbackNotice({ text: msg, type });
-    setTimeout(() => setFeedbackNotice(null), 3500);
+    setTimeout(() => setFeedbackNotice(null), 3000);
   };
 
-  // 1. Cambio de Estado
+  // 1. Cambio directo de Estado (3 opciones: Pendiente, Completado, Cancelado)
   const handleStatusChange = async (newStatus) => {
-    setCurrentStatus(newStatus);
+    const norm = normalizeStatus(newStatus);
+    setCurrentStatus(norm);
     setIsUpdating(true);
 
     if (onOrderUpdated) {
-      onOrderUpdated(actualId, { estado: newStatus });
+      onOrderUpdated(actualId, { estado: norm });
     }
 
     try {
-      await updateOrder(actualId, { estado: newStatus });
-      showNotice(`Estado del pedido actualizado a "${newStatus}"`);
+      await updateOrder(actualId, { estado: norm });
+      showNotice(`Estado del pedido actualizado a "${norm}"`);
       if (onStatusUpdated) onStatusUpdated(true);
     } catch (err) {
       console.error('Error al actualizar estado:', err);
@@ -71,14 +84,15 @@ export default function OrderDetailView({
     }
   };
 
-  // 2. Cambio directo de Método de Pago
+  // 2. Cambio directo de Método de Pago (2 opciones: Transferencia y Efectivo)
   const handlePaymentChange = async (newMethod) => {
-    setCurrentMetodo(newMethod);
+    const norm = normalizePayment(newMethod);
+    setCurrentMetodo(norm);
     setIsUpdating(true);
 
     const updatePayload = {
-      metodoPago: newMethod,
-      cliente: { ...(order.cliente || {}), metodoPago: newMethod }
+      metodoPago: norm,
+      cliente: { ...(order.cliente || {}), metodoPago: norm }
     };
 
     if (onOrderUpdated) {
@@ -87,7 +101,7 @@ export default function OrderDetailView({
 
     try {
       await updateOrder(actualId, updatePayload);
-      showNotice(`Método de pago actualizado a "${newMethod}"`);
+      showNotice(`Método de pago actualizado a "${norm}"`);
       if (onStatusUpdated) onStatusUpdated(true);
     } catch (err) {
       console.error('Error al actualizar método de pago:', err);
@@ -97,8 +111,8 @@ export default function OrderDetailView({
     }
   };
 
-  // 3. Guardar cambios del formulario de edición
-  const handleSaveEdit = async (e) => {
+  // 3. Guardar edición directa en la página (Sin modal)
+  const handleSavePageEdit = async (e) => {
     e.preventDefault();
     setIsSavingEdit(true);
 
@@ -123,7 +137,7 @@ export default function OrderDetailView({
       await updateOrder(actualId, updatePayload);
       setCurrentStatus(editForm.estado);
       setCurrentMetodo(editForm.metodoPago);
-      setIsEditing(false);
+      setIsEditingOnPage(false);
       showNotice('Pedido actualizado exitosamente');
       if (onStatusUpdated) onStatusUpdated(true);
     } catch (err) {
@@ -134,7 +148,7 @@ export default function OrderDetailView({
     }
   };
 
-  // 4. Confirmar eliminación del pedido
+  // 4. Confirmar eliminación del pedido (Único modal)
   const handleConfirmDelete = async () => {
     setIsDeleting(true);
 
@@ -154,16 +168,9 @@ export default function OrderDetailView({
   };
 
   const getStatusBadge = (st) => {
-    const s = (st || '').toLowerCase();
-    if (s === 'completado' || s === 'entregado' || s === 'pagado') {
-      return 'bg-emerald-50 text-emerald-800 border-emerald-300';
-    }
-    if (s === 'en preparación' || s === 'en preparacion' || s === 'preparando') {
-      return 'bg-blue-50 text-blue-800 border-blue-300';
-    }
-    if (s === 'cancelado') {
-      return 'bg-red-50 text-red-800 border-red-300';
-    }
+    const s = normalizeStatus(st);
+    if (s === 'Completado') return 'bg-emerald-50 text-emerald-800 border-emerald-300';
+    if (s === 'Cancelado') return 'bg-red-50 text-red-800 border-red-300';
     return 'bg-amber-50 text-amber-800 border-amber-300';
   };
 
@@ -198,8 +205,9 @@ export default function OrderDetailView({
           </span>
         </div>
 
-        {/* Acciones principales: Estado, Editar y Eliminar */}
+        {/* Acciones principales: Estado, Editar en página y Eliminar */}
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          {/* Selector de Estado directo (3 opciones) */}
           <div className="flex items-center gap-1.5">
             <label className="text-xs font-bold text-[#565935] whitespace-nowrap">Estado:</label>
             <select 
@@ -209,21 +217,39 @@ export default function OrderDetailView({
               className="px-3 py-1.5 rounded-xl border border-[#ECC979]/40 text-xs font-semibold text-[#2E2A27] focus:outline-none focus:ring-2 focus:ring-[#CF7D65]/20 bg-[#FAF6EF] cursor-pointer"
             >
               <option value="Pendiente">⏳ Pendiente</option>
-              <option value="En preparación">🥣 En preparación</option>
               <option value="Completado">✅ Completado</option>
-              <option value="Entregado">📦 Entregado</option>
               <option value="Cancelado">❌ Cancelado</option>
             </select>
           </div>
 
+          {/* Botón Editar en página (sin modal) */}
           <button
             type="button"
-            onClick={() => setIsEditing(true)}
-            className="px-3 py-1.5 rounded-xl bg-[#FAF6EF] hover:bg-[#CF7D65] hover:text-white text-[#CF7D65] border border-[#ECC979]/50 text-xs font-semibold cursor-pointer transition-colors"
+            onClick={() => {
+              if (isEditingOnPage) {
+                setIsEditingOnPage(false);
+              } else {
+                setEditForm({
+                  nombre: order.cliente?.nombre || '',
+                  telefono: order.cliente?.telefono || '',
+                  metodoPago: normalizePayment(order.cliente?.metodoPago || order.metodoPago),
+                  estado: normalizeStatus(order.estado),
+                  total: Number(order.total || 0),
+                  notas: order.notas || ''
+                });
+                setIsEditingOnPage(true);
+              }
+            }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors border ${
+              isEditingOnPage
+                ? 'bg-[#CF7D65] text-white border-[#CF7D65]'
+                : 'bg-[#FAF6EF] hover:bg-[#CF7D65] hover:text-white text-[#CF7D65] border-[#ECC979]/50'
+            }`}
           >
-            Editar
+            {isEditingOnPage ? 'Cerrar Edición' : 'Editar Pedido'}
           </button>
 
+          {/* Botón Eliminar (Abre el único modal de confirmación) */}
           <button
             type="button"
             onClick={() => setShowDeleteModal(true)}
@@ -237,6 +263,7 @@ export default function OrderDetailView({
         </div>
       </div>
 
+      {/* Aviso de feedback */}
       {feedbackNotice && (
         <div className={`p-3 rounded-xl border text-xs font-semibold flex items-center gap-2 ${
           feedbackNotice.type === 'error'
@@ -246,6 +273,108 @@ export default function OrderDetailView({
           <span>{feedbackNotice.type === 'error' ? '⚠️' : '✓'}</span>
           <span>{feedbackNotice.text}</span>
         </div>
+      )}
+
+      {/* FORMULARIO DE EDICIÓN DIRECTO EN LA PÁGINA (Sin modal) */}
+      {isEditingOnPage && (
+        <form onSubmit={handleSavePageEdit} className="bg-white p-6 rounded-2xl border-2 border-[#565935]/40 shadow-sm space-y-4 animate-in fade-in duration-150">
+          <div className="flex justify-between items-center border-b border-[#ECC979]/20 pb-2">
+            <h3 className="text-sm font-bold text-[#565935]">
+              ✏️ Editando Pedido {orderId}
+            </h3>
+            <span className="text-xs text-[#7A736B]">Guarda los cambios directamente</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-xs">
+            <div>
+              <label className="block font-bold text-[#565935] mb-1">Nombre del Cliente *</label>
+              <input 
+                type="text" 
+                required
+                value={editForm.nombre}
+                onChange={(e) => setEditForm(prev => ({ ...prev, nombre: e.target.value }))}
+                className="w-full px-3 py-2 rounded-xl border border-[#ECC979]/40 bg-[#FAF6EF] text-[#2E2A27]"
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-[#565935] mb-1">Teléfono / WhatsApp</label>
+              <input 
+                type="text" 
+                value={editForm.telefono}
+                onChange={(e) => setEditForm(prev => ({ ...prev, telefono: e.target.value }))}
+                className="w-full px-3 py-2 rounded-xl border border-[#ECC979]/40 bg-[#FAF6EF] text-[#2E2A27] font-mono"
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-[#565935] mb-1">Total ($ USD)</label>
+              <input 
+                type="number" 
+                step="0.01"
+                min="0"
+                value={editForm.total}
+                onChange={(e) => setEditForm(prev => ({ ...prev, total: e.target.value }))}
+                className="w-full px-3 py-2 rounded-xl border border-[#ECC979]/40 bg-[#FAF6EF] text-[#D4AF37] font-extrabold tabular-nums text-sm"
+              />
+            </div>
+
+            {/* Método de Pago - 2 opciones: Transferencia y Efectivo */}
+            <div>
+              <label className="block font-bold text-[#565935] mb-1">Método de Pago *</label>
+              <select
+                value={editForm.metodoPago}
+                onChange={(e) => setEditForm(prev => ({ ...prev, metodoPago: e.target.value }))}
+                className="w-full px-3 py-2 rounded-xl border border-[#ECC979]/40 bg-[#FAF6EF] text-[#2E2A27] font-semibold cursor-pointer"
+              >
+                <option value="Transferencia">🏦 Transferencia</option>
+                <option value="Efectivo">💵 Efectivo</option>
+              </select>
+            </div>
+
+            {/* Estado - 3 opciones: Pendiente, Completado y Cancelado */}
+            <div>
+              <label className="block font-bold text-[#565935] mb-1">Estado del Pedido *</label>
+              <select
+                value={editForm.estado}
+                onChange={(e) => setEditForm(prev => ({ ...prev, estado: e.target.value }))}
+                className="w-full px-3 py-2 rounded-xl border border-[#ECC979]/40 bg-[#FAF6EF] text-[#2E2A27] font-semibold cursor-pointer"
+              >
+                <option value="Pendiente">⏳ Pendiente</option>
+                <option value="Completado">✅ Completado</option>
+                <option value="Cancelado">❌ Cancelado</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block font-bold text-[#565935] mb-1">Notas u Observaciones</label>
+              <input 
+                type="text" 
+                value={editForm.notas}
+                onChange={(e) => setEditForm(prev => ({ ...prev, notas: e.target.value }))}
+                className="w-full px-3 py-2 rounded-xl border border-[#ECC979]/40 bg-[#FAF6EF] text-[#2E2A27]"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2.5 pt-2 border-t border-gray-100">
+            <button
+              type="button"
+              disabled={isSavingEdit}
+              onClick={() => setIsEditingOnPage(false)}
+              className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-xs cursor-pointer"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={isSavingEdit}
+              className="px-5 py-2 rounded-xl bg-[#565935] hover:bg-[#484B2C] text-white font-semibold text-xs cursor-pointer shadow-sm"
+            >
+              {isSavingEdit ? 'Guardando...' : 'Guardar Cambios'}
+            </button>
+          </div>
+        </form>
       )}
 
       {/* Grid de contenido */}
@@ -303,7 +432,7 @@ export default function OrderDetailView({
                 <span className="text-gray-700 font-mono block">{order.cliente?.telefono || 'No especificado'}</span>
               </div>
 
-              {/* Método de Pago - EDITABLE DIRECTAMENTE */}
+              {/* Método de Pago - 2 opciones: Transferencia y Efectivo */}
               <div>
                 <span className="text-[#7A736B] text-[11px] block font-semibold mb-1">Método de Pago:</span>
                 <select
@@ -312,10 +441,8 @@ export default function OrderDetailView({
                   onChange={(e) => handlePaymentChange(e.target.value)}
                   className="w-full px-3 py-1.5 rounded-xl border border-[#ECC979]/40 bg-[#FAF6EF] text-[#2E2A27] text-xs font-semibold cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#565935]"
                 >
-                  <option value="WhatsApp / Transferencia">📱 WhatsApp / Transferencia</option>
                   <option value="Transferencia">🏦 Transferencia</option>
                   <option value="Efectivo">💵 Efectivo</option>
-                  <option value="Tarjeta">💳 Tarjeta / POS</option>
                 </select>
               </div>
 
@@ -332,124 +459,7 @@ export default function OrderDetailView({
         </div>
       </div>
 
-      {/* MODAL PARA EDITAR PEDIDO */}
-      {isEditing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full border border-[#ECC979]/50 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex justify-between items-center border-b border-[#ECC979]/20 pb-3">
-              <div>
-                <h4 className="text-lg font-serif font-bold text-[#2E2A27]">
-                  Editar Pedido {orderId}
-                </h4>
-                <p className="text-xs text-[#7A736B]">Actualiza la información del pedido.</p>
-              </div>
-              <button 
-                type="button"
-                onClick={() => setIsEditing(false)}
-                className="w-8 h-8 rounded-full bg-[#FAF6EF] text-[#7A736B] hover:text-[#2E2A27] flex items-center justify-center cursor-pointer font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveEdit} className="space-y-4 text-xs sm:text-sm">
-              <div>
-                <label className="block text-xs font-bold text-[#565935] mb-1">Nombre del Cliente *</label>
-                <input 
-                  type="text" 
-                  required
-                  value={editForm.nombre}
-                  onChange={(e) => setEditForm(prev => ({ ...prev, nombre: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-xl border border-[#ECC979]/40 bg-[#FAF6EF] text-[#2E2A27] font-medium"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-[#565935] mb-1">Teléfono / WhatsApp</label>
-                <input 
-                  type="text" 
-                  value={editForm.telefono}
-                  onChange={(e) => setEditForm(prev => ({ ...prev, telefono: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-xl border border-[#ECC979]/40 bg-[#FAF6EF] text-[#2E2A27] font-mono text-xs"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-[#565935] mb-1">Método de Pago *</label>
-                  <select
-                    value={editForm.metodoPago}
-                    onChange={(e) => setEditForm(prev => ({ ...prev, metodoPago: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-xl border border-[#ECC979]/40 bg-[#FAF6EF] text-[#2E2A27] font-semibold cursor-pointer"
-                  >
-                    <option value="WhatsApp / Transferencia">📱 WhatsApp / Transferencia</option>
-                    <option value="Transferencia">🏦 Transferencia</option>
-                    <option value="Efectivo">💵 Efectivo</option>
-                    <option value="Tarjeta">💳 Tarjeta / POS</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-[#565935] mb-1">Estado del Pedido *</label>
-                  <select
-                    value={editForm.estado}
-                    onChange={(e) => setEditForm(prev => ({ ...prev, estado: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-xl border border-[#ECC979]/40 bg-[#FAF6EF] text-[#2E2A27] font-semibold cursor-pointer"
-                  >
-                    <option value="Pendiente">⏳ Pendiente</option>
-                    <option value="En preparación">🥣 En preparación</option>
-                    <option value="Completado">✅ Completado</option>
-                    <option value="Entregado">📦 Entregado</option>
-                    <option value="Cancelado">❌ Cancelado</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-[#565935] mb-1">Total ($ USD)</label>
-                <input 
-                  type="number" 
-                  step="0.01"
-                  min="0"
-                  value={editForm.total}
-                  onChange={(e) => setEditForm(prev => ({ ...prev, total: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-xl border border-[#ECC979]/40 bg-[#FAF6EF] text-[#D4AF37] font-extrabold tabular-nums text-base"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-[#565935] mb-1">Notas u Observaciones</label>
-                <textarea 
-                  rows="2"
-                  value={editForm.notas}
-                  onChange={(e) => setEditForm(prev => ({ ...prev, notas: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-xl border border-[#ECC979]/40 bg-[#FAF6EF] text-[#2E2A27] text-xs"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2.5 pt-3 border-t border-[#ECC979]/20">
-                <button
-                  type="button"
-                  disabled={isSavingEdit}
-                  onClick={() => setIsEditing(false)}
-                  className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-xs cursor-pointer transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSavingEdit}
-                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#565935] to-[#6A6E41] hover:from-[#484B2C] hover:to-[#565935] text-white font-semibold text-xs shadow-sm cursor-pointer transition-all border border-[#ECC979]/50"
-                >
-                  {isSavingEdit ? 'Guardando...' : 'Guardar Cambios'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL PARA CONFIRMAR ELIMINACIÓN */}
+      {/* ÚNICO MODAL PERMITIDO: Confirmación para Eliminar Pedido */}
       {showDeleteModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
           <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-sm w-full border border-red-200 shadow-2xl text-center space-y-4 animate-in fade-in zoom-in-95 duration-150">

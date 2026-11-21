@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { deleteProduct } from '../services/api';
+import React, { useState, useEffect } from 'react';
+import { deleteProduct, getAllCategories } from '../services/api';
 
 export default function ProductsTable({ products = [], onRefresh, onNewProduct, onEditProduct }) {
   const [searchTerm, setSearchTerm] = useState('');
@@ -8,7 +8,21 @@ export default function ProductsTable({ products = [], onRefresh, onNewProduct, 
   const [isDeleting, setIsDeleting] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState(null);
 
-  const categories = ['Todas', ...new Set(products.map(p => p.categoria).filter(Boolean))];
+  // Sincronización reactiva de categorías disponibles (propias y creadas en Gestión de Categorías)
+  const [categories, setCategories] = useState(() => ['Todas', ...getAllCategories(products)]);
+
+  useEffect(() => {
+    setCategories(['Todas', ...getAllCategories(products)]);
+
+    const handleSync = () => {
+      setCategories(['Todas', ...getAllCategories(products)]);
+    };
+
+    window.addEventListener('serenoa_categories_updated', handleSync);
+    return () => {
+      window.removeEventListener('serenoa_categories_updated', handleSync);
+    };
+  }, [products]);
 
   const filteredProducts = products.filter(p => {
     const matchCat = categoryFilter === 'Todas' || (p.categoria || '').toLowerCase() === categoryFilter.toLowerCase();

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ProductCard from '../components/ProductCard';
-import { fetchProducts } from '../services/api';
+import { fetchProducts, getAllCategories } from '../services/api';
 import heroCookiesImg from '../assets/hero-cookies.jpg';
 import logoSerenoa from '../assets/logo_serenoa_oficial.png';
 
@@ -29,10 +29,36 @@ export default function Storefront({
     fetchProducts().then(prods => {
       setProducts(prods);
     });
+
+    const handleProductsUpdated = (e) => {
+      if (e?.detail && Array.isArray(e.detail)) {
+        setProducts(e.detail);
+      } else {
+        fetchProducts().then(prods => setProducts(prods));
+      }
+    };
+
+    window.addEventListener('serenoa_products_updated', handleProductsUpdated);
+    return () => {
+      window.removeEventListener('serenoa_products_updated', handleProductsUpdated);
+    };
   }, []);
 
-  // Categorías únicas
-  const categories = ['Todos', ...new Set(products.map(p => p.categoria).filter(Boolean))];
+  // Categorías sincronizadas de forma reactiva (incluyendo las creadas en el panel de administrador)
+  const [categories, setCategories] = useState(() => ['Todos', ...getAllCategories(products)]);
+
+  useEffect(() => {
+    setCategories(['Todos', ...getAllCategories(products)]);
+
+    const handleCategoriesSync = () => {
+      setCategories(['Todos', ...getAllCategories(products)]);
+    };
+
+    window.addEventListener('serenoa_categories_updated', handleCategoriesSync);
+    return () => {
+      window.removeEventListener('serenoa_categories_updated', handleCategoriesSync);
+    };
+  }, [products]);
 
   // Filtro de catálogo completo
   const filteredProducts = products.filter(product => {
@@ -241,7 +267,7 @@ export default function Storefront({
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 lg:gap-8 w-full">
-                {products.slice(0, 8).map(producto => (
+                {products.map(producto => (
                   <ProductCard key={producto.id} producto={producto} />
                 ))}
               </div>

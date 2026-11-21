@@ -71,23 +71,30 @@ const getProductById = async (req, res) => {
 const createProduct = async (req, res) => {
     try {
         const { nombre, precio, imagen, disponibilidad, categoria, stock } = req.body;
-        const descripcion = req.body.descripcion || req.body.desc;
+        const rawDesc = req.body.descripcion || req.body.desc;
+        const descFinal = (rawDesc && String(rawDesc).trim()) ? String(rawDesc).trim() : 'Creación artesanal de autor Serenoa.';
 
-        if (!nombre || !descripcion || precio === undefined) {
+        if (!nombre || !String(nombre).trim() || precio === undefined || isNaN(Number(precio))) {
             return res.status(400).json({
                 success: false,
-                message: 'Por favor complete todos los campos obligatorios: nombre, descripcion y precio'
+                message: 'Por favor complete los campos obligatorios: nombre y precio válido'
             });
         }
 
+        const isAvailable = (disponibilidad !== undefined) 
+            ? Boolean(disponibilidad) 
+            : ((req.body.activo !== undefined) 
+                ? Boolean(req.body.activo) 
+                : true);
+
         const newProduct = await Product.create({
-            nombre,
-            descripcion,
+            nombre: String(nombre).trim(),
+            descripcion: descFinal,
             precio: Number(precio),
             imagen: imagen || 'https://images.unsplash.com/photo-1565958011703-44f9829ba187?q=80&w=400&auto=format&fit=crop',
-            disponibilidad: disponibilidad !== undefined ? disponibilidad : (Number(stock) > 0),
+            disponibilidad: isAvailable,
             categoria: categoria || 'Tartas',
-            stock: stock !== undefined ? Number(stock) : 10
+            stock: stock !== undefined && !isNaN(Number(stock)) ? Number(stock) : 10
         });
 
         res.status(201).json({
@@ -125,8 +132,12 @@ const updateProduct = async (req, res) => {
             updateData.descripcion = updateData.desc;
         }
 
+        if (updateData.activo !== undefined && updateData.disponibilidad === undefined) {
+            updateData.disponibilidad = Boolean(updateData.activo);
+        }
+
         // Si se actualiza el stock a 0, ajustar disponibilidad automáticamente si aplica
-        if (updateData.stock !== undefined && updateData.disponibilidad === undefined) {
+        if (updateData.stock !== undefined && updateData.disponibilidad === undefined && updateData.activo === undefined) {
             updateData.disponibilidad = Number(updateData.stock) > 0;
         }
 

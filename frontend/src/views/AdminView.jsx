@@ -7,7 +7,7 @@ import MessagesManager from '../components/MessagesManager';
 import ProductFormView from './ProductFormView';
 import NewOrderView from './NewOrderView';
 import OrderDetailView from './OrderDetailView';
-import { fetchProducts, fetchOrders, loginAdmin } from '../services/api';
+import { fetchProducts, fetchOrders, loginAdmin, normalizeProduct, getAllCategories } from '../services/api';
 
 export default function AdminView({ onNavigateToStore }) {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
@@ -75,7 +75,7 @@ export default function AdminView({ onNavigateToStore }) {
   // Actualización optimista de pedidos en memoria para feedback instantáneo
   const handleOrderUpdated = (orderId, updatePayload) => {
     setOrders(prev => prev.map(o => {
-      const match = o._id === orderId || o.id === orderId || o.codigo === orderId;
+      const match = String(o._id) === String(orderId) || String(o.id) === String(orderId) || String(o.codigo) === String(orderId);
       if (!match) return o;
       const mergedCliente = updatePayload.cliente
         ? { ...(o.cliente || {}), ...updatePayload.cliente }
@@ -93,7 +93,7 @@ export default function AdminView({ onNavigateToStore }) {
 
     setSelectedOrder(prev => {
       if (!prev) return null;
-      const match = prev._id === orderId || prev.id === orderId || prev.codigo === orderId;
+      const match = String(prev._id) === String(orderId) || String(prev.id) === String(orderId) || String(prev.codigo) === String(orderId);
       if (!match) return prev;
       const mergedCliente = updatePayload.cliente
         ? { ...(prev.cliente || {}), ...updatePayload.cliente }
@@ -112,8 +112,16 @@ export default function AdminView({ onNavigateToStore }) {
 
   // Eliminación optimista de pedidos en memoria para feedback instantáneo
   const handleOrderDeleted = (orderId) => {
-    setOrders(prev => prev.filter(o => o._id !== orderId && o.id !== orderId && o.codigo !== orderId));
-    if (selectedOrder && (selectedOrder._id === orderId || selectedOrder.id === orderId || selectedOrder.codigo === orderId)) {
+    setOrders(prev => prev.filter(o => 
+      String(o._id) !== String(orderId) && 
+      String(o.id) !== String(orderId) && 
+      String(o.codigo) !== String(orderId)
+    ));
+    if (selectedOrder && (
+      String(selectedOrder._id) === String(orderId) || 
+      String(selectedOrder.id) === String(orderId) || 
+      String(selectedOrder.codigo) === String(orderId)
+    )) {
       handleBackToList();
     }
   };
@@ -149,12 +157,14 @@ export default function AdminView({ onNavigateToStore }) {
 
   // Navegación a vistas de página completa
   const handleOpenNewProduct = () => {
+    setActiveTab('productos');
     setEditingProduct(null);
     setSubPage('nuevo-producto');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleOpenEditProduct = (prod) => {
+    setActiveTab('productos');
     setEditingProduct(prod);
     setSubPage('editar-producto');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -178,8 +188,8 @@ export default function AdminView({ onNavigateToStore }) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Conteo de pedidos pendientes en tiempo real para el badge del sidebar
-  const pendingCount = orders.filter(o => (o.estado || 'Pendiente').toLowerCase() === 'pendiente').length;
+  // Conteo total de pedidos en tiempo real para el badge del sidebar
+  const totalOrdersCount = orders.length;
 
   // Si no está autenticado, muestra la pantalla de inicio de sesión
   if (!isAuthenticated) {
@@ -260,14 +270,14 @@ export default function AdminView({ onNavigateToStore }) {
 
       {/* SIDEBAR RESPONSIVO */}
       <aside 
-        className={`fixed md:sticky top-0 left-0 h-screen w-64 bg-[#565935] text-white flex flex-col justify-between p-5 z-50 transition-transform duration-300 ease-in-out flex-shrink-0 border-r border-[#ECC979]/30 ${isSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full md:translate-x-0'}`}
+        className={`fixed md:sticky top-0 left-0 h-screen w-72 bg-[#565935] text-white flex flex-col justify-between p-6 z-50 transition-transform duration-300 ease-in-out flex-shrink-0 border-r border-[#ECC979]/30 ${isSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full md:translate-x-0'}`}
       >
         <div>
           {/* Logo y Encabezado */}
           <div className="pb-6 mb-6 border-b border-[#ECC979]/20 flex items-center justify-between">
             <div>
               <span className="font-serif text-2xl font-bold tracking-tight block text-[#FAF6EF]">Serenoa</span>
-              <span className="text-[11px] text-[#ECC979] uppercase tracking-widest block font-bold">
+              <span className="text-[11px] text-[#ECC979] uppercase tracking-widest block font-bold mt-0.5">
                 ADMINISTRADOR
               </span>
             </div>
@@ -284,10 +294,10 @@ export default function AdminView({ onNavigateToStore }) {
           </div>
 
           {/* Menú de pestañas */}
-          <nav className="space-y-1.5 text-xs sm:text-sm">
+          <nav className="space-y-2 text-xs sm:text-sm">
             {[
               { id: 'dashboard', label: 'Métricas del Negocio', icon: '📊' },
-              { id: 'pedidos', label: 'Gestión de Pedidos', icon: '📦', badge: pendingCount },
+              { id: 'pedidos', label: 'Gestión de Pedidos', icon: '📦', badge: totalOrdersCount },
               { id: 'productos', label: 'Catálogo de Postres', icon: '🍰', count: products.length },
               { id: 'categorias', label: 'Gestión de Categorías', icon: '🏷️' },
               { id: 'mensajes', label: 'Consultas Clientes', icon: '💬' }
@@ -300,19 +310,19 @@ export default function AdminView({ onNavigateToStore }) {
                   setSubPage('list'); // Al cambiar de pestaña vuelve a la lista
                   setIsSidebarOpen(false); // Cierra sidebar en móvil
                 }}
-                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl font-medium transition-all cursor-pointer ${activeTab === tab.id && subPage === 'list' ? 'bg-white/20 text-[#FAF6EF] font-bold shadow-sm border-l-4 border-[#ECC979]' : 'text-[#FAF6EF]/75 hover:bg-white/10 hover:text-white'}`}
+                className={`w-full flex items-center justify-between gap-4 px-4 py-3 rounded-xl font-medium transition-all cursor-pointer ${activeTab === tab.id && subPage === 'list' ? 'bg-white/20 text-[#FAF6EF] font-bold shadow-sm border-l-4 border-[#ECC979]' : 'text-[#FAF6EF]/80 hover:bg-white/10 hover:text-white'}`}
               >
-                <div className="flex items-center gap-2.5">
-                  <span>{tab.icon}</span>
-                  <span>{tab.label}</span>
+                <div className="flex items-center gap-3">
+                  <span className="shrink-0 text-base">{tab.icon}</span>
+                  <span className="whitespace-nowrap font-medium">{tab.label}</span>
                 </div>
-                {tab.badge > 0 && (
-                  <span className="px-2 py-0.5 rounded-full bg-[#D4AF37] text-white text-[10px] font-bold shadow-sm border border-white/20">
+                {tab.badge !== undefined && (
+                  <span className="ml-auto shrink-0 min-w-6 h-6 px-2 flex items-center justify-center rounded-full bg-[#D4AF37] text-white text-xs font-bold shadow-xs border border-white/30">
                     {tab.badge}
                   </span>
                 )}
                 {tab.count !== undefined && (
-                  <span className="text-[11px] text-[#FAF6EF]/50">{tab.count}</span>
+                  <span className="ml-auto shrink-0 text-xs text-[#FAF6EF]/60 font-semibold">{tab.count}</span>
                 )}
               </button>
             ))}
@@ -364,28 +374,51 @@ export default function AdminView({ onNavigateToStore }) {
         ) : subPage === 'nuevo-producto' ? (
           <ProductFormView 
             productToEdit={null}
-            onSaved={() => {
-              loadData();
+            onSaved={(savedProd) => {
+              setActiveTab('productos');
+              if (savedProd) {
+                setProducts(prev => {
+                  const norm = normalizeProduct(savedProd);
+                  return [norm, ...prev.filter(p => String(p._id || p.id) !== String(norm._id || norm.id))];
+                });
+              }
+              loadData(true);
               handleBackToList();
             }}
-            onBack={handleBackToList}
-            existingCategories={[...new Set(products.map(p => p.categoria).filter(Boolean))]}
+            onBack={() => {
+              setActiveTab('productos');
+              handleBackToList();
+            }}
+            existingCategories={getAllCategories(products)}
           />
         ) : subPage === 'editar-producto' ? (
           <ProductFormView 
             productToEdit={editingProduct}
-            onSaved={() => {
-              loadData();
+            onSaved={(savedProd) => {
+              setActiveTab('productos');
+              if (savedProd) {
+                setProducts(prev => {
+                  const norm = normalizeProduct(savedProd);
+                  return prev.map(p => String(p._id || p.id) === String(norm._id || norm.id) ? norm : p);
+                });
+              }
+              loadData(true);
               handleBackToList();
             }}
-            onBack={handleBackToList}
-            existingCategories={[...new Set(products.map(p => p.categoria).filter(Boolean))]}
+            onBack={() => {
+              setActiveTab('productos');
+              handleBackToList();
+            }}
+            existingCategories={getAllCategories(products)}
           />
         ) : subPage === 'nuevo-pedido' ? (
           <NewOrderView 
             products={products}
-            onOrderCreated={() => {
-              loadData();
+            onOrderCreated={(newOrder) => {
+              if (newOrder) {
+                setOrders(prev => [newOrder, ...prev]);
+              }
+              loadData(true);
               handleBackToList();
             }}
             onBack={handleBackToList}

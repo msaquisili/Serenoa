@@ -47,6 +47,14 @@ const createOrder = async (req, res) => {
         const finalTotal = total !== undefined ? Number(total) : calculatedTotal;
         const finalCodigo = req.body.codigo || `SER-${Math.floor(1000 + Math.random() * 9000)}`;
 
+        const finalPaymentMethod = (metodoPago || cliente?.metodoPago || '').toLowerCase().includes('efectivo') ? 'Efectivo' : 'Transferencia';
+        let initialEstado = 'Pendiente';
+        if (req.body.estado) {
+            const stLower = String(req.body.estado).toLowerCase();
+            if (stLower === 'completado') initialEstado = 'Completado';
+            else if (stLower === 'cancelado') initialEstado = 'Cancelado';
+        }
+
         const newOrder = await Order.create({
             codigo: finalCodigo,
             cliente: {
@@ -54,12 +62,12 @@ const createOrder = async (req, res) => {
                 email: cliente.email || '',
                 telefono: cliente.telefono || '',
                 direccion: cliente.direccion || 'Retiro en pastelería',
-                metodoPago: metodoPago || cliente.metodoPago || 'WhatsApp / Transferencia'
+                metodoPago: finalPaymentMethod
             },
             productos: normalizedItems,
             total: finalTotal,
-            estado: req.body.estado || 'Pendiente',
-            estadoPago: req.body.estadoPago || 'Pendiente',
+            estado: initialEstado,
+            estadoPago: initialEstado === 'Completado' ? 'Pagado' : (initialEstado === 'Cancelado' ? 'Cancelado' : 'Pendiente'),
             estadoLogistica: 'Por preparar',
             notas: notas || ''
         });
@@ -102,10 +110,30 @@ const getOrders = async (req, res) => {
 
         const orders = await Order.find(filtro).sort({ createdAt: -1 });
 
+        // Normalizar los pedidos para que el cliente siempre reciba estados y métodos limpios
+        const normalizedOrders = orders.map(order => {
+            const obj = order.toObject ? order.toObject() : { ...order };
+            const st = String(obj.estado || '').trim().toLowerCase();
+            if (st === 'completado' || st === 'entregado' || st === 'pagado') {
+                obj.estado = 'Completado';
+            } else if (st === 'cancelado') {
+                obj.estado = 'Cancelado';
+            } else {
+                obj.estado = 'Pendiente';
+            }
+
+            const rawPay = String(obj.cliente?.metodoPago || obj.metodoPago || '').trim().toLowerCase();
+            const cleanPay = rawPay.includes('efectivo') ? 'Efectivo' : 'Transferencia';
+            if (!obj.cliente) obj.cliente = {};
+            obj.cliente.metodoPago = cleanPay;
+            obj.metodoPago = cleanPay;
+            return obj;
+        });
+
         res.status(200).json({
             success: true,
-            count: orders.length,
-            data: orders
+            count: normalizedOrders.length,
+            data: normalizedOrders
         });
     } catch (error) {
         res.status(500).json({
@@ -173,28 +201,37 @@ const updateOrderStatus = async (req, res) => {
             });
         }
 
+        // Sanitizar datos heredados para asegurar compatibilidad total con el schema
+        const existingSt = String(order.estado || '').trim().toLowerCase();
+        if (existingSt === 'completado' || existingSt === 'entregado' || existingSt === 'pagado') {
+            order.estado = 'Completado';
+        } else if (existingSt === 'cancelado') {
+            order.estado = 'Cancelado';
+        } else {
+            order.estado = 'Pendiente';
+        }
+
+        if (!order.cliente) order.cliente = {};
+        const existingPay = String(order.cliente.metodoPago || '').trim().toLowerCase();
+        order.cliente.metodoPago = existingPay.includes('efectivo') ? 'Efectivo' : 'Transferencia';
+
         const { estado, estadoPago, estadoLogistica, cliente, notas, metodoPago, total, productos } = req.body;
 
-        // Normalizar y actualizar estado
+        // Normalizar y actualizar estado (3 opciones estrictas: Pendiente, Completado, Cancelado)
         if (estado) {
-            const st = String(estado).trim();
-            const lower = st.toLowerCase();
-            if (lower === 'pendiente') order.estado = 'Pendiente';
-            else if (lower === 'completado') order.estado = 'Completado';
+            const lower = String(estado).trim().toLowerCase();
+            if (lower === 'completado') order.estado = 'Completado';
             else if (lower === 'cancelado') order.estado = 'Cancelado';
-            else if (lower === 'pagado') order.estado = 'Pagado';
-            else if (lower === 'en preparación' || lower === 'en preparacion') order.estado = 'En preparación';
-            else if (lower === 'entregado') order.estado = 'Entregado';
-            else order.estado = st;
+            else order.estado = 'Pendiente';
         }
 
-        if (estadoPago) {
-            order.estadoPago = estadoPago;
-            if (!estado) order.estado = estadoPago;
-        }
-
-        if (estadoLogistica) {
-            order.estadoLogistica = estadoLogistica;
+        // Actualizar método de pago explícito (2 opciones estrictas: Transferencia, Efectivo)
+        const rawPayment = metodoPago || cliente?.metodoPago;
+        if (rawPayment) {
+            const normalizedPayment = String(rawPayment).toLowerCase().includes('efectivo') ? 'Efectivo' : 'Transferencia';
+            if (!order.cliente) order.cliente = {};
+            order.cliente.metodoPago = normalizedPayment;
+            order.metodoPago = normalizedPayment;
         }
 
         // Actualizar información del cliente
@@ -204,15 +241,10 @@ const updateOrderStatus = async (req, res) => {
                 email: cliente.email !== undefined ? cliente.email : (order.cliente?.email || ''),
                 telefono: cliente.telefono !== undefined ? cliente.telefono : (order.cliente?.telefono || ''),
                 direccion: cliente.direccion !== undefined ? cliente.direccion : (order.cliente?.direccion || ''),
-                metodoPago: cliente.metodoPago !== undefined ? cliente.metodoPago : (order.cliente?.metodoPago || 'WhatsApp / Transferencia')
+                metodoPago: rawPayment
+                    ? (String(rawPayment).toLowerCase().includes('efectivo') ? 'Efectivo' : 'Transferencia')
+                    : (order.cliente?.metodoPago || 'Transferencia')
             };
-        }
-
-        // Actualizar método de pago explícito (a nivel de cliente y/o raíz)
-        const newPaymentMethod = metodoPago || cliente?.metodoPago;
-        if (newPaymentMethod) {
-            if (!order.cliente) order.cliente = {};
-            order.cliente.metodoPago = newPaymentMethod;
         }
 
         if (total !== undefined && !isNaN(Number(total))) {

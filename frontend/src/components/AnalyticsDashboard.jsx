@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Chart, registerables } from 'chart.js';
+import { getAllCategories } from '../services/api';
 
 Chart.register(...registerables);
 
@@ -13,15 +14,23 @@ export default function AnalyticsDashboard({ orders = [], products = [] }) {
   const barChartInstance = useRef(null);
   const donutChartInstance = useRef(null);
 
+  // Función unificada de normalización de estado
+  const normalizeStatus = (raw) => {
+    const s = String(raw || '').trim().toLowerCase();
+    if (s === 'completado' || s === 'entregado' || s === 'pagado') return 'Completado';
+    if (s === 'cancelado') return 'Cancelado';
+    return 'Pendiente';
+  };
+
   // 1. Métricas Generales (3 KPIs principales, sin Ticket Promedio)
-  const completedOrders = orders.filter(o => (o.estado || '').toLowerCase() === 'completado');
+  const completedOrders = orders.filter(o => normalizeStatus(o.estado) === 'Completado');
   const totalRevenue = completedOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
   const activeProductsCount = products.filter(p => p.activo).length;
 
   // 2. Mapeo de ventas agregadas por producto (pedidos no cancelados)
   const productSalesMap = {};
   orders.forEach(order => {
-    if ((order.estado || '').toLowerCase() !== 'cancelado' && Array.isArray(order.productos)) {
+    if (normalizeStatus(order.estado) !== 'Cancelado' && Array.isArray(order.productos)) {
       order.productos.forEach(item => {
         const name = item.nombre || 'Desconocido';
         const qty = Number(item.cantidad) || 0;
@@ -35,10 +44,8 @@ export default function AnalyticsDashboard({ orders = [], products = [] }) {
     }
   });
 
-  // Opciones fijas de categorías requeridas más cualquier otra existente
-  const baseCategories = ['Todas', 'Galletas', 'Tartas', 'Macarons', 'Postres Especiales', 'Cheesecakes'];
-  const productCats = products.map(p => p.categoria).filter(Boolean);
-  const allCategoryOptions = ['Todas', ...new Set([...baseCategories.slice(1), ...productCats])];
+  // Opciones sincronizadas de categorías requeridas más cualquier otra existente
+  const allCategoryOptions = ['Todas', ...getAllCategories(products)];
 
   // Postres filtrados por la categoría seleccionada
   const categoryProducts = selectedCategory === 'Todas'

@@ -9,91 +9,83 @@ export default function OrdersTable({
   onNewOrder, 
   onViewOrderDetail 
 }) {
+  // Filtros de navegación
   const [filterStatus, setFilterStatus] = useState('Todos');
   const [filterPayment, setFilterPayment] = useState('Todos');
   const [updatingId, setUpdatingId] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
 
-  // Estados para modal de edición
-  const [editingOrder, setEditingOrder] = useState(null);
-  const [editForm, setEditForm] = useState({
+  // Estado para edición INLINE (sin modal)
+  const [inlineEditingId, setInlineEditingId] = useState(null);
+  const [inlineForm, setInlineForm] = useState({
     nombre: '',
     telefono: '',
-    metodoPago: 'WhatsApp / Transferencia',
+    metodoPago: 'Transferencia',
     estado: 'Pendiente',
     total: 0,
     notas: ''
   });
-  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [isSavingInline, setIsSavingInline] = useState(false);
 
-  // Estados para modal de confirmación de eliminación
+  // Estado ÚNICAMENTE para modal de confirmación de eliminación
   const [deletingOrder, setDeletingOrder] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Mostrar mensaje toast temporal
+  // Notificación toast flotante
   const showToast = (msg, type = 'success') => {
     setToastMessage({ text: msg, type });
-    setTimeout(() => setToastMessage(null), 3500);
+    setTimeout(() => setToastMessage(null), 3000);
   };
 
-  // Totales reales según estado (con soporte amplio para variantes de estado)
-  const allCount = orders.length;
-  
-  const pendingCount = orders.filter(o => {
-    const s = (o.estado || 'Pendiente').toLowerCase();
-    return s === 'pendiente' || s === 'por preparar';
-  }).length;
+  // Normalización de Método de Pago: estrictamente 'Transferencia' o 'Efectivo'
+  const normalizePayment = (raw) => {
+    const s = String(raw || '').toLowerCase();
+    return s.includes('efectivo') ? 'Efectivo' : 'Transferencia';
+  };
 
-  const preparingCount = orders.filter(o => {
-    const s = (o.estado || '').toLowerCase();
-    return s === 'en preparación' || s === 'en preparacion' || s === 'preparando';
-  }).length;
+  // Normalización de Estado: estrictamente 'Pendiente', 'Completado', 'Cancelado'
+  const normalizeStatus = (raw) => {
+    const s = String(raw || '').toLowerCase();
+    if (s === 'completado' || s === 'entregado' || s === 'pagado') return 'Completado';
+    if (s === 'cancelado') return 'Cancelado';
+    return 'Pendiente';
+  };
 
-  const completedCount = orders.filter(o => {
-    const s = (o.estado || '').toLowerCase();
-    return s === 'completado' || s === 'entregado' || s === 'pagado';
-  }).length;
+  // 1. Pedidos que coinciden con el método de pago seleccionado (para que los conteos de estado sumen exactamente el total mostrado)
+  const ordersMatchingPayment = filterPayment === 'Todos'
+    ? orders
+    : orders.filter(o => normalizePayment(o.cliente?.metodoPago || o.metodoPago) === filterPayment);
 
-  const cancelledCount = orders.filter(o => {
-    const s = (o.estado || '').toLowerCase();
-    return s === 'cancelado';
-  }).length;
+  // Conteos exactos y dinámicos para las píldoras de estado
+  const allCount = ordersMatchingPayment.length;
+  const pendingCount = ordersMatchingPayment.filter(o => normalizeStatus(o.estado) === 'Pendiente').length;
+  const completedCount = ordersMatchingPayment.filter(o => normalizeStatus(o.estado) === 'Completado').length;
+  const cancelledCount = ordersMatchingPayment.filter(o => normalizeStatus(o.estado) === 'Cancelado').length;
 
-  // Filtrado de pedidos en tiempo real
+  // 2. Pedidos que coinciden con el estado seleccionado (para que las opciones de método de pago muestren sus cantidades exactas)
+  const ordersMatchingStatus = filterStatus === 'Todos'
+    ? orders
+    : orders.filter(o => normalizeStatus(o.estado) === filterStatus);
+
+  const allPaymentCount = ordersMatchingStatus.length;
+  const transferCount = ordersMatchingStatus.filter(o => normalizePayment(o.cliente?.metodoPago || o.metodoPago) === 'Transferencia').length;
+  const cashCount = ordersMatchingStatus.filter(o => normalizePayment(o.cliente?.metodoPago || o.metodoPago) === 'Efectivo').length;
+
+  // Filtrado de pedidos
   const filteredOrders = orders.filter(o => {
-    const st = (o.estado || 'Pendiente').toLowerCase();
-    let matchStatus = true;
+    const st = normalizeStatus(o.estado);
+    const matchStatus = filterStatus === 'Todos' || st === filterStatus;
 
-    if (filterStatus === 'Pendiente') {
-      matchStatus = st === 'pendiente' || st === 'por preparar';
-    } else if (filterStatus === 'En preparación') {
-      matchStatus = st === 'en preparación' || st === 'en preparacion' || st === 'preparando';
-    } else if (filterStatus === 'Completado') {
-      matchStatus = st === 'completado' || st === 'entregado' || st === 'pagado';
-    } else if (filterStatus === 'Cancelado') {
-      matchStatus = st === 'cancelado';
-    }
-
-    const pago = (o.cliente?.metodoPago || o.metodoPago || '').toLowerCase();
-    let matchPayment = true;
-    if (filterPayment === 'Transferencia') {
-      matchPayment = pago.includes('transferencia');
-    } else if (filterPayment === 'Efectivo') {
-      matchPayment = pago.includes('efectivo');
-    } else if (filterPayment === 'WhatsApp') {
-      matchPayment = pago.includes('whatsapp');
-    } else if (filterPayment === 'Tarjeta') {
-      matchPayment = pago.includes('tarjeta');
-    }
+    const pago = normalizePayment(o.cliente?.metodoPago || o.metodoPago);
+    const matchPayment = filterPayment === 'Todos' || pago === filterPayment;
 
     return matchStatus && matchPayment;
   });
 
-  // 1. Cambio reactivo inmediato del Estado
+  // 1. Cambio directo e instantáneo de Estado
   const handleStatusChange = async (orderId, newStatus) => {
     setUpdatingId(orderId);
     
-    // Notificar al padre para actualización optimista inmediata en memoria
     if (onOrderUpdated) {
       onOrderUpdated(orderId, { estado: newStatus });
     }
@@ -104,17 +96,16 @@ export default function OrdersTable({
       if (onOrdersUpdated) onOrdersUpdated(true);
     } catch (err) {
       console.error('Error actualizando estado:', err);
-      showToast('Error al guardar el estado en el servidor', 'error');
+      showToast('Error al guardar el estado', 'error');
     } finally {
       setUpdatingId(null);
     }
   };
 
-  // 2. Cambio reactivo inmediato del Método de Pago
+  // 2. Cambio directo e instantáneo de Método de Pago
   const handlePaymentChange = async (orderId, newMethod) => {
     setUpdatingId(orderId);
 
-    // Notificar al padre para actualización optimista inmediata en memoria
     if (onOrderUpdated) {
       onOrderUpdated(orderId, { metodoPago: newMethod, cliente: { metodoPago: newMethod } });
     }
@@ -131,66 +122,60 @@ export default function OrdersTable({
     }
   };
 
-  // 3. Abrir modal para editar pedido
-  const handleOpenEdit = (order) => {
-    setEditingOrder(order);
-    setEditForm({
+  // 3. Iniciar edición INLINE en la propia tabla (sin modal)
+  const handleStartInlineEdit = (order) => {
+    const orderId = order._id || order.id || order.codigo;
+    setInlineEditingId(orderId);
+    setInlineForm({
       nombre: order.cliente?.nombre || '',
       telefono: order.cliente?.telefono || '',
-      metodoPago: order.cliente?.metodoPago || order.metodoPago || 'WhatsApp / Transferencia',
-      estado: order.estado || 'Pendiente',
+      metodoPago: normalizePayment(order.cliente?.metodoPago || order.metodoPago),
+      estado: normalizeStatus(order.estado),
       total: Number(order.total || 0),
       notas: order.notas || ''
     });
   };
 
-  // 4. Guardar cambios del pedido editado
-  const handleSaveEdit = async (e) => {
-    e.preventDefault();
-    if (!editingOrder) return;
-    const orderId = editingOrder._id || editingOrder.id || editingOrder.codigo;
-
-    setIsSavingEdit(true);
+  // 4. Guardar edición INLINE
+  const handleSaveInlineEdit = async (orderId) => {
+    setIsSavingInline(true);
 
     const updatePayload = {
       cliente: {
-        ...(editingOrder.cliente || {}),
-        nombre: editForm.nombre.trim(),
-        telefono: editForm.telefono.trim(),
-        metodoPago: editForm.metodoPago
+        nombre: inlineForm.nombre.trim(),
+        telefono: inlineForm.telefono.trim(),
+        metodoPago: inlineForm.metodoPago
       },
-      metodoPago: editForm.metodoPago,
-      estado: editForm.estado,
-      total: Number(editForm.total) || 0,
-      notas: editForm.notas.trim()
+      metodoPago: inlineForm.metodoPago,
+      estado: inlineForm.estado,
+      total: Number(inlineForm.total) || 0,
+      notas: inlineForm.notas.trim()
     };
 
-    // Actualización optimista inmediata
     if (onOrderUpdated) {
       onOrderUpdated(orderId, updatePayload);
     }
 
     try {
       await updateOrder(orderId, updatePayload);
-      showToast('Pedido actualizado con éxito');
-      setEditingOrder(null);
+      showToast('Pedido actualizado correctamente');
+      setInlineEditingId(null);
       if (onOrdersUpdated) onOrdersUpdated(true);
     } catch (err) {
-      console.error('Error guardando edición de pedido:', err);
-      showToast('Error al guardar los cambios del pedido', 'error');
+      console.error('Error guardando edición:', err);
+      showToast('Error al guardar cambios', 'error');
     } finally {
-      setIsSavingEdit(false);
+      setIsSavingInline(false);
     }
   };
 
-  // 5. Eliminar pedido
+  // 5. Confirmar eliminación (Único modal permitido)
   const handleConfirmDelete = async () => {
     if (!deletingOrder) return;
     const orderId = deletingOrder._id || deletingOrder.id || deletingOrder.codigo;
 
     setIsDeleting(true);
 
-    // Eliminación optimista inmediata en interfaz
     if (onOrderDeleted) {
       onOrderDeleted(orderId);
     }
@@ -202,35 +187,27 @@ export default function OrdersTable({
       if (onOrdersUpdated) onOrdersUpdated(true);
     } catch (err) {
       console.error('Error eliminando pedido:', err);
-      showToast('Error al eliminar el pedido', 'error');
+      showToast('Error al eliminar pedido', 'error');
     } finally {
       setIsDeleting(false);
     }
   };
 
-  // Clases CSS dinámicas para estado
-  const getStatusBadgeClass = (status) => {
-    const s = (status || '').toLowerCase();
-    if (s === 'completado' || s === 'entregado' || s === 'pagado') {
-      return 'bg-emerald-50 text-emerald-800 border-emerald-300';
-    }
-    if (s === 'en preparación' || s === 'en preparacion' || s === 'preparando') {
-      return 'bg-blue-50 text-blue-800 border-blue-300';
-    }
-    if (s === 'cancelado') {
-      return 'bg-red-50 text-red-800 border-red-300';
-    }
+  const getStatusBadgeClass = (st) => {
+    const norm = normalizeStatus(st);
+    if (norm === 'Completado') return 'bg-emerald-50 text-emerald-800 border-emerald-300';
+    if (norm === 'Cancelado') return 'bg-red-50 text-red-800 border-red-300';
     return 'bg-amber-50 text-amber-800 border-amber-300';
   };
 
   return (
     <div className="bg-white rounded-2xl border border-[#ECC979]/40 shadow-sm overflow-hidden relative">
-      {/* Notificación Toast flotante */}
+      {/* Toast de notificación temporal */}
       {toastMessage && (
-        <div className={`fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl shadow-lg border text-xs sm:text-sm font-semibold flex items-center gap-2 transition-all animate-bounce ${
+        <div className={`fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl shadow-xl border text-xs sm:text-sm font-semibold flex items-center gap-2 transition-all ${
           toastMessage.type === 'error'
             ? 'bg-red-50 border-red-200 text-red-800'
-            : 'bg-[#565935] border-[#ECC979]/60 text-white shadow-xl'
+            : 'bg-[#565935] border-[#ECC979]/60 text-white'
         }`}>
           <span>{toastMessage.type === 'error' ? '⚠️' : '✓'}</span>
           <span>{toastMessage.text}</span>
@@ -260,62 +237,74 @@ export default function OrdersTable({
           </button>
         </div>
 
-        {/* Barra de Filtros: Estados con conteo reactivo y Método de Pago */}
+        {/* Barra de Filtros: Estados y Métodos de Pago corregidos */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-          {/* Píldoras de Estado reflejando el total real */}
-          <div className="flex flex-wrap gap-1.5 bg-[#FAF6EF] p-1 rounded-xl border border-[#ECC979]/30">
+          {/* Píldoras de Estado (Exactamente: Todos, Pendientes, Completados, Cancelados) */}
+          <div className="flex flex-wrap gap-2 bg-[#FAF6EF] p-1.5 rounded-xl border border-[#ECC979]/30">
             <button
               type="button"
               onClick={() => setFilterStatus('Todos')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${filterStatus === 'Todos' ? 'bg-[#565935] text-white shadow-sm' : 'text-[#7A736B] hover:text-[#2E2A27]'}`}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${filterStatus === 'Todos' ? 'bg-[#565935] text-white shadow-sm' : 'text-[#7A736B] hover:text-[#2E2A27]'}`}
             >
               Todos ({allCount})
             </button>
             <button
               type="button"
               onClick={() => setFilterStatus('Pendiente')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${filterStatus === 'Pendiente' ? 'bg-[#565935] text-white shadow-sm' : 'text-[#7A736B] hover:text-[#2E2A27]'}`}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${filterStatus === 'Pendiente' ? 'bg-[#565935] text-white shadow-sm' : 'text-[#7A736B] hover:text-[#2E2A27]'}`}
             >
               Pendientes ({pendingCount})
             </button>
             <button
               type="button"
-              onClick={() => setFilterStatus('En preparación')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${filterStatus === 'En preparación' ? 'bg-[#565935] text-white shadow-sm' : 'text-[#7A736B] hover:text-[#2E2A27]'}`}
-            >
-              En preparación ({preparingCount})
-            </button>
-            <button
-              type="button"
               onClick={() => setFilterStatus('Completado')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${filterStatus === 'Completado' ? 'bg-[#565935] text-white shadow-sm' : 'text-[#7A736B] hover:text-[#2E2A27]'}`}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${filterStatus === 'Completado' ? 'bg-[#565935] text-white shadow-sm' : 'text-[#7A736B] hover:text-[#2E2A27]'}`}
             >
               Completados ({completedCount})
             </button>
             <button
               type="button"
               onClick={() => setFilterStatus('Cancelado')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${filterStatus === 'Cancelado' ? 'bg-[#565935] text-white shadow-sm' : 'text-[#7A736B] hover:text-[#2E2A27]'}`}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${filterStatus === 'Cancelado' ? 'bg-[#565935] text-white shadow-sm' : 'text-[#7A736B] hover:text-[#2E2A27]'}`}
             >
               Cancelados ({cancelledCount})
             </button>
           </div>
 
-          {/* Opción Método de Pago */}
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-bold text-[#565935] whitespace-nowrap">Filtrar Pago:</label>
+          {/* Filtro Método de Pago (Exactamente: Todos, Transferencia, Efectivo) */}
+          <div className="flex items-center gap-2.5">
+            <label className="text-xs font-bold text-[#565935] whitespace-nowrap">Método Pago:</label>
             <select
               value={filterPayment}
               onChange={(e) => setFilterPayment(e.target.value)}
-              className="px-3 py-1.5 rounded-lg border border-[#ECC979]/40 text-xs font-semibold text-[#2E2A27] focus:outline-none focus:ring-2 focus:ring-[#CF7D65]/20 bg-[#FAF6EF] cursor-pointer"
+              className="px-3.5 py-1.5 rounded-lg border border-[#ECC979]/40 text-xs font-semibold text-[#2E2A27] focus:outline-none focus:ring-2 focus:ring-[#CF7D65]/20 bg-[#FAF6EF] cursor-pointer"
             >
-              <option value="Todos">Todos los métodos</option>
-              <option value="Transferencia">🏦 Transferencia</option>
-              <option value="Efectivo">💵 Efectivo</option>
-              <option value="WhatsApp">📱 WhatsApp</option>
-              <option value="Tarjeta">💳 Tarjeta</option>
+              <option value="Todos">Todos los métodos ({allPaymentCount})</option>
+              <option value="Transferencia">🏦 Transferencia ({transferCount})</option>
+              <option value="Efectivo">💵 Efectivo ({cashCount})</option>
             </select>
           </div>
+        </div>
+
+        {/* Resumen dinámico del filtro activo que confirma el total exacto */}
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[#7A736B] pt-1 border-t border-gray-100">
+          <span>
+            Mostrando <strong className="text-[#2E2A27]">{filteredOrders.length}</strong> de <strong className="text-[#2E2A27]">{orders.length}</strong> pedidos registrados
+            {filterStatus !== 'Todos' && <span className="ml-1 text-[#565935] font-semibold">· Estado: {filterStatus}</span>}
+            {filterPayment !== 'Todos' && <span className="ml-1 text-[#565935] font-semibold">· Método: {filterPayment}</span>}
+          </span>
+          {(filterStatus !== 'Todos' || filterPayment !== 'Todos') && (
+            <button
+              type="button"
+              onClick={() => {
+                setFilterStatus('Todos');
+                setFilterPayment('Todos');
+              }}
+              className="text-xs text-[#CF7D65] hover:text-[#565935] font-semibold underline cursor-pointer transition-colors"
+            >
+              Restablecer filtros
+            </button>
+          )}
         </div>
       </div>
 
@@ -345,106 +334,229 @@ export default function OrdersTable({
               filteredOrders.map(order => {
                 const totalItems = (order.productos || []).reduce((acc, p) => acc + (p.cantidad || 1), 0);
                 const orderId = order._id || order.id || order.codigo;
-                const currentMetodo = order.cliente?.metodoPago || order.metodoPago || 'WhatsApp / Transferencia';
-                const currentEstado = order.estado || 'Pendiente';
+                const currentMetodo = normalizePayment(order.cliente?.metodoPago || order.metodoPago);
+                const currentEstado = normalizeStatus(order.estado);
+                const isEditingThis = inlineEditingId === orderId;
 
                 return (
-                  <tr key={orderId} className="hover:bg-[#FAF6EF]/40 transition-colors">
-                    {/* Código del Pedido */}
-                    <td className="py-3 px-4 font-mono font-bold text-[#565935]">
-                      {order.codigo || `SER-${String(orderId).slice(-4).toUpperCase()}`}
-                    </td>
+                  <React.Fragment key={orderId}>
+                    {/* Fila principal del pedido */}
+                    <tr className={`hover:bg-[#FAF6EF]/40 transition-colors ${isEditingThis ? 'bg-[#FAF6EF]/70' : ''}`}>
+                      {/* Código */}
+                      <td className="py-3 px-4 font-mono font-bold text-[#565935]">
+                        {order.codigo || `SER-${String(orderId).slice(-4).toUpperCase()}`}
+                      </td>
 
-                    {/* Cliente */}
-                    <td className="py-3 px-4">
-                      <div className="font-semibold text-gray-900">
-                        {order.cliente?.nombre || 'Cliente General'}
-                      </div>
-                      <div className="text-[11px] text-gray-400 font-mono">
-                        {order.cliente?.telefono || 'Sin teléfono'}
-                      </div>
-                    </td>
+                      {/* Cliente */}
+                      <td className="py-3 px-4">
+                        <div className="font-semibold text-gray-900">
+                          {order.cliente?.nombre || 'Cliente General'}
+                        </div>
+                        <div className="text-[11px] text-gray-400 font-mono">
+                          {order.cliente?.telefono || 'Sin teléfono'}
+                        </div>
+                      </td>
 
-                    {/* Cantidad de productos */}
-                    <td className="py-3 px-4 text-gray-600">
-                      {totalItems} {totalItems === 1 ? 'postre' : 'postres'}
-                    </td>
+                      {/* Productos */}
+                      <td className="py-3 px-4 text-gray-600">
+                        {totalItems} {totalItems === 1 ? 'postre' : 'postres'}
+                      </td>
 
-                    {/* Método de Pago - EDITABLE DIRECTAMENTE */}
-                    <td className="py-3 px-4">
-                      <select
-                        value={currentMetodo}
-                        disabled={updatingId === orderId}
-                        onChange={(e) => handlePaymentChange(orderId, e.target.value)}
-                        title="Haz clic para cambiar el método de pago"
-                        className="text-xs font-semibold px-2.5 py-1 rounded-full border border-[#ECC979]/40 bg-[#FAF6EF] text-[#2E2A27] hover:border-[#565935] cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#565935]"
-                      >
-                        <option value="WhatsApp / Transferencia">📱 WhatsApp / Transferencia</option>
-                        <option value="Transferencia">🏦 Transferencia</option>
-                        <option value="Efectivo">💵 Efectivo</option>
-                        <option value="Tarjeta">💳 Tarjeta / POS</option>
-                      </select>
-                    </td>
-
-                    {/* Total */}
-                    <td className="py-3 px-4 font-extrabold text-[#D4AF37] font-sans tabular-nums text-sm">
-                      ${Number(order.total || 0).toFixed(2)}
-                    </td>
-
-                    {/* Estado - EDITABLE DIRECTAMENTE */}
-                    <td className="py-3 px-4">
-                      <select 
-                        value={currentEstado}
-                        disabled={updatingId === orderId}
-                        onChange={(e) => handleStatusChange(orderId, e.target.value)}
-                        title="Haz clic para actualizar el estado del pedido"
-                        className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-all cursor-pointer focus:outline-none ${getStatusBadgeClass(currentEstado)}`}
-                      >
-                        <option value="Pendiente">⏳ Pendiente</option>
-                        <option value="En preparación">🥣 En preparación</option>
-                        <option value="Completado">✅ Completado</option>
-                        <option value="Entregado">📦 Entregado</option>
-                        <option value="Cancelado">❌ Cancelado</option>
-                      </select>
-                    </td>
-
-                    {/* Acciones: Ver Detalle, Editar y Eliminar */}
-                    <td className="py-3 px-4 text-center">
-                      <div className="inline-flex items-center gap-1.5">
-                        {/* Botón Ver Detalle */}
-                        <button 
-                          type="button"
-                          onClick={() => onViewOrderDetail(order)}
-                          title="Ver detalle completo"
-                          className="px-2.5 py-1.5 rounded-lg bg-[#FAF6EF] hover:bg-[#565935] hover:text-white text-[#565935] border border-[#ECC979]/40 text-xs font-semibold transition-colors cursor-pointer"
+                      {/* Método de Pago - 2 opciones: Transferencia y Efectivo */}
+                      <td className="py-3.5 px-4">
+                        <select
+                          value={currentMetodo}
+                          disabled={updatingId === orderId}
+                          onChange={(e) => handlePaymentChange(orderId, e.target.value)}
+                          title="Haz clic para cambiar el método de pago"
+                          className="text-xs font-semibold px-3 py-1.5 rounded-full border border-[#ECC979]/40 bg-[#FAF6EF] text-[#2E2A27] hover:border-[#565935] cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#565935] min-w-[135px]"
                         >
-                          Ver
-                        </button>
+                          <option value="Transferencia">🏦 Transferencia</option>
+                          <option value="Efectivo">💵 Efectivo</option>
+                        </select>
+                      </td>
 
-                        {/* Botón Editar Pedido */}
-                        <button 
-                          type="button"
-                          onClick={() => handleOpenEdit(order)}
-                          title="Editar información del pedido"
-                          className="px-2.5 py-1.5 rounded-lg bg-[#FAF6EF] hover:bg-[#CF7D65] hover:text-white text-[#CF7D65] border border-[#ECC979]/40 text-xs font-semibold transition-colors cursor-pointer"
-                        >
-                          Editar
-                        </button>
+                      {/* Total */}
+                      <td className="py-3.5 px-4 font-extrabold text-[#D4AF37] font-sans tabular-nums text-sm whitespace-nowrap">
+                        ${Number(order.total || 0).toFixed(2)}
+                      </td>
 
-                        {/* Botón Eliminar Pedido */}
-                        <button 
-                          type="button"
-                          onClick={() => setDeletingOrder(order)}
-                          title="Eliminar este pedido"
-                          className="p-1.5 rounded-lg bg-red-50 hover:bg-red-600 hover:text-white text-red-600 border border-red-200 text-xs font-semibold transition-colors cursor-pointer"
+                      {/* Estado - 3 opciones: Pendiente, Completado y Cancelado */}
+                      <td className="py-3.5 px-4">
+                        <select 
+                          value={currentEstado}
+                          disabled={updatingId === orderId}
+                          onChange={(e) => handleStatusChange(orderId, e.target.value)}
+                          title="Haz clic para actualizar el estado del pedido"
+                          className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-all cursor-pointer focus:outline-none min-w-[130px] ${getStatusBadgeClass(currentEstado)}`}
                         >
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                            <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                          </svg>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+                          <option value="Pendiente">⏳ Pendiente</option>
+                          <option value="Completado">✅ Completado</option>
+                          <option value="Cancelado">❌ Cancelado</option>
+                        </select>
+                      </td>
+
+                      {/* Acciones */}
+                      <td className="py-3.5 px-4 text-center">
+                        <div className="inline-flex items-center gap-2">
+                          {/* Botón Ver Detalle (Página completa, sin modal) */}
+                          <button 
+                            type="button"
+                            onClick={() => onViewOrderDetail(order)}
+                            title="Ver detalle completo"
+                            className="px-3 py-1.5 rounded-lg bg-[#FAF6EF] hover:bg-[#565935] hover:text-white text-[#565935] border border-[#ECC979]/40 text-xs font-semibold transition-colors cursor-pointer"
+                          >
+                            Ver
+                          </button>
+
+                          {/* Botón Editar (Activa edición inline en la fila, sin modal) */}
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              if (isEditingThis) {
+                                setInlineEditingId(null);
+                              } else {
+                                handleStartInlineEdit(order);
+                              }
+                            }}
+                            title="Editar datos del pedido en línea"
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer border ${
+                              isEditingThis 
+                                ? 'bg-[#CF7D65] text-white border-[#CF7D65]' 
+                                : 'bg-[#FAF6EF] hover:bg-[#CF7D65] hover:text-white text-[#CF7D65] border-[#ECC979]/40'
+                            }`}
+                          >
+                            {isEditingThis ? 'Cerrar' : 'Editar'}
+                          </button>
+
+                          {/* Botón Eliminar (Abre el único modal de confirmación) */}
+                          <button 
+                            type="button"
+                            onClick={() => setDeletingOrder(order)}
+                            title="Eliminar este pedido"
+                            className="p-1.5 rounded-lg bg-red-50 hover:bg-red-600 hover:text-white text-red-600 border border-red-200 text-xs font-semibold transition-colors cursor-pointer"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                              <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                            </svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+
+                    {/* Fila expandible de EDICIÓN INLINE (Sin modals) */}
+                    {isEditingThis && (
+                      <tr className="bg-[#FAF6EF]/90 border-y border-[#ECC979]/40">
+                        <td colSpan="7" className="p-4 sm:p-5">
+                          <div className="bg-white p-4 rounded-xl border border-[#ECC979]/40 space-y-3">
+                            <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+                              <span className="text-xs font-bold text-[#565935]">
+                                ✏️ Edición en línea de {order.codigo || `SER-${String(orderId).slice(-4).toUpperCase()}`}
+                              </span>
+                              <span className="text-[11px] text-[#7A736B]">Guarda tus cambios directamente aquí</span>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                              {/* Cliente Nombre */}
+                              <div>
+                                <label className="block font-bold text-[#565935] mb-1">Cliente *</label>
+                                <input 
+                                  type="text" 
+                                  value={inlineForm.nombre}
+                                  onChange={(e) => setInlineForm(prev => ({ ...prev, nombre: e.target.value }))}
+                                  className="w-full px-2.5 py-1.5 rounded-lg border border-[#ECC979]/40 bg-[#FAF6EF] text-[#2E2A27]"
+                                  placeholder="Nombre del cliente"
+                                />
+                              </div>
+
+                              {/* Teléfono */}
+                              <div>
+                                <label className="block font-bold text-[#565935] mb-1">Teléfono</label>
+                                <input 
+                                  type="text" 
+                                  value={inlineForm.telefono}
+                                  onChange={(e) => setInlineForm(prev => ({ ...prev, telefono: e.target.value }))}
+                                  className="w-full px-2.5 py-1.5 rounded-lg border border-[#ECC979]/40 bg-[#FAF6EF] text-[#2E2A27] font-mono"
+                                  placeholder="+593 9..."
+                                />
+                              </div>
+
+                              {/* Método de Pago: Transferencia o Efectivo */}
+                              <div>
+                                <label className="block font-bold text-[#565935] mb-1">Método de Pago</label>
+                                <select
+                                  value={inlineForm.metodoPago}
+                                  onChange={(e) => setInlineForm(prev => ({ ...prev, metodoPago: e.target.value }))}
+                                  className="w-full px-2.5 py-1.5 rounded-lg border border-[#ECC979]/40 bg-[#FAF6EF] text-[#2E2A27] font-semibold cursor-pointer"
+                                >
+                                  <option value="Transferencia">🏦 Transferencia</option>
+                                  <option value="Efectivo">💵 Efectivo</option>
+                                </select>
+                              </div>
+
+                              {/* Estado: Pendiente, Completado o Cancelado */}
+                              <div>
+                                <label className="block font-bold text-[#565935] mb-1">Estado</label>
+                                <select
+                                  value={inlineForm.estado}
+                                  onChange={(e) => setInlineForm(prev => ({ ...prev, estado: e.target.value }))}
+                                  className="w-full px-2.5 py-1.5 rounded-lg border border-[#ECC979]/40 bg-[#FAF6EF] text-[#2E2A27] font-semibold cursor-pointer"
+                                >
+                                  <option value="Pendiente">⏳ Pendiente</option>
+                                  <option value="Completado">✅ Completado</option>
+                                  <option value="Cancelado">❌ Cancelado</option>
+                                </select>
+                              </div>
+
+                              {/* Total ($) */}
+                              <div>
+                                <label className="block font-bold text-[#565935] mb-1">Total ($)</label>
+                                <input 
+                                  type="number" 
+                                  step="0.01"
+                                  min="0"
+                                  value={inlineForm.total}
+                                  onChange={(e) => setInlineForm(prev => ({ ...prev, total: e.target.value }))}
+                                  className="w-full px-2.5 py-1.5 rounded-lg border border-[#ECC979]/40 bg-[#FAF6EF] text-[#D4AF37] font-extrabold tabular-nums"
+                                />
+                              </div>
+
+                              {/* Notas */}
+                              <div className="sm:col-span-2 md:col-span-3">
+                                <label className="block font-bold text-[#565935] mb-1">Notas / Observaciones</label>
+                                <input 
+                                  type="text" 
+                                  value={inlineForm.notas}
+                                  onChange={(e) => setInlineForm(prev => ({ ...prev, notas: e.target.value }))}
+                                  placeholder="Detalles de entrega, instrucciones o dedicatoria..."
+                                  className="w-full px-2.5 py-1.5 rounded-lg border border-[#ECC979]/40 bg-[#FAF6EF] text-[#2E2A27]"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+                              <button
+                                type="button"
+                                disabled={isSavingInline}
+                                onClick={() => setInlineEditingId(null)}
+                                className="px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-xs cursor-pointer"
+                              >
+                                Cancelar
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isSavingInline}
+                                onClick={() => handleSaveInlineEdit(orderId)}
+                                className="px-4 py-1.5 rounded-lg bg-[#565935] hover:bg-[#484B2C] text-white font-semibold text-xs cursor-pointer shadow-sm transition-colors"
+                              >
+                                {isSavingInline ? 'Guardando...' : 'Guardar Cambios'}
+                              </button>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 );
               })
             )}
@@ -452,131 +564,7 @@ export default function OrdersTable({
         </table>
       </div>
 
-      {/* MODAL 1: EDITAR PEDIDO COMPLETO */}
-      {editingOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full border border-[#ECC979]/50 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex justify-between items-center border-b border-[#ECC979]/20 pb-3">
-              <div>
-                <h4 className="text-lg font-serif font-bold text-[#2E2A27]">
-                  Editar Pedido {editingOrder.codigo || `SER-${String(editingOrder._id || editingOrder.id).slice(-4).toUpperCase()}`}
-                </h4>
-                <p className="text-xs text-[#7A736B]">Modifica los datos del cliente, pago o estado.</p>
-              </div>
-              <button 
-                type="button"
-                onClick={() => setEditingOrder(null)}
-                className="w-8 h-8 rounded-full bg-[#FAF6EF] text-[#7A736B] hover:text-[#2E2A27] flex items-center justify-center cursor-pointer font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveEdit} className="space-y-4 text-xs sm:text-sm">
-              {/* Nombre del cliente */}
-              <div>
-                <label className="block text-xs font-bold text-[#565935] mb-1">Nombre del Cliente *</label>
-                <input 
-                  type="text" 
-                  required
-                  value={editForm.nombre}
-                  onChange={(e) => setEditForm(prev => ({ ...prev, nombre: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-xl border border-[#ECC979]/40 bg-[#FAF6EF] text-[#2E2A27] focus:outline-none focus:ring-2 focus:ring-[#CF7D65]/20 font-medium"
-                />
-              </div>
-
-              {/* Teléfono / WhatsApp */}
-              <div>
-                <label className="block text-xs font-bold text-[#565935] mb-1">Teléfono / WhatsApp</label>
-                <input 
-                  type="text" 
-                  value={editForm.telefono}
-                  onChange={(e) => setEditForm(prev => ({ ...prev, telefono: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-xl border border-[#ECC979]/40 bg-[#FAF6EF] text-[#2E2A27] focus:outline-none focus:ring-2 focus:ring-[#CF7D65]/20 font-mono text-xs"
-                />
-              </div>
-
-              {/* Fila: Método de Pago y Estado */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-[#565935] mb-1">Método de Pago *</label>
-                  <select
-                    value={editForm.metodoPago}
-                    onChange={(e) => setEditForm(prev => ({ ...prev, metodoPago: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-xl border border-[#ECC979]/40 bg-[#FAF6EF] text-[#2E2A27] font-semibold cursor-pointer"
-                  >
-                    <option value="WhatsApp / Transferencia">📱 WhatsApp / Transferencia</option>
-                    <option value="Transferencia">🏦 Transferencia</option>
-                    <option value="Efectivo">💵 Efectivo</option>
-                    <option value="Tarjeta">💳 Tarjeta / POS</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-[#565935] mb-1">Estado del Pedido *</label>
-                  <select
-                    value={editForm.estado}
-                    onChange={(e) => setEditForm(prev => ({ ...prev, estado: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-xl border border-[#ECC979]/40 bg-[#FAF6EF] text-[#2E2A27] font-semibold cursor-pointer"
-                  >
-                    <option value="Pendiente">⏳ Pendiente</option>
-                    <option value="En preparación">🥣 En preparación</option>
-                    <option value="Completado">✅ Completado</option>
-                    <option value="Entregado">📦 Entregado</option>
-                    <option value="Cancelado">❌ Cancelado</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Total ($) */}
-              <div>
-                <label className="block text-xs font-bold text-[#565935] mb-1">Total a Pagar ($ USD)</label>
-                <input 
-                  type="number" 
-                  step="0.01"
-                  min="0"
-                  value={editForm.total}
-                  onChange={(e) => setEditForm(prev => ({ ...prev, total: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-xl border border-[#ECC979]/40 bg-[#FAF6EF] text-[#D4AF37] font-extrabold focus:outline-none focus:ring-2 focus:ring-[#CF7D65]/20 font-sans tabular-nums text-base"
-                />
-              </div>
-
-              {/* Notas u Observaciones */}
-              <div>
-                <label className="block text-xs font-bold text-[#565935] mb-1">Notas u Observaciones</label>
-                <textarea 
-                  rows="2"
-                  value={editForm.notas}
-                  onChange={(e) => setEditForm(prev => ({ ...prev, notas: e.target.value }))}
-                  placeholder="Instrucciones de entrega, dedicatoria o detalles especiales..."
-                  className="w-full px-3 py-2 rounded-xl border border-[#ECC979]/40 bg-[#FAF6EF] text-[#2E2A27] focus:outline-none focus:ring-2 focus:ring-[#CF7D65]/20 text-xs"
-                />
-              </div>
-
-              {/* Botones de acción del Modal */}
-              <div className="flex justify-end gap-2.5 pt-3 border-t border-[#ECC979]/20">
-                <button
-                  type="button"
-                  disabled={isSavingEdit}
-                  onClick={() => setEditingOrder(null)}
-                  className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-xs cursor-pointer transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSavingEdit}
-                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#565935] to-[#6A6E41] hover:from-[#484B2C] hover:to-[#565935] text-white font-semibold text-xs shadow-sm cursor-pointer transition-all border border-[#ECC979]/50"
-                >
-                  {isSavingEdit ? 'Guardando...' : 'Guardar Cambios'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 2: CONFIRMAR ELIMINACIÓN DE PEDIDO */}
+      {/* ÚNICO MODAL PERMITIDO: Confirmación para Eliminar Pedido */}
       {deletingOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
           <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-sm w-full border border-red-200 shadow-2xl text-center space-y-4 animate-in fade-in zoom-in-95 duration-150">

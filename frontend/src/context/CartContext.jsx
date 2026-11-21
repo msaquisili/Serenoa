@@ -106,7 +106,7 @@ export const CartProvider = ({ children }) => {
         cliente: {
           nombre: 'Cliente Web / WhatsApp',
           telefono: `+${WHATSAPP_PHONE}`,
-          metodoPago: 'WhatsApp / Transferencia'
+          metodoPago: 'Transferencia'
         },
         productos: cart.map(i => ({
           producto: i.id && i.id.startsWith('prod-') ? null : i.id,

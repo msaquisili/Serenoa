@@ -1,8 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { saveProduct } from '../services/api';
+import { saveProduct, getAllCategories, saveCustomCategory } from '../services/api';
 
 export default function ProductFormView({ productToEdit, onSaved, onBack, existingCategories = [] }) {
   const isEditing = Boolean(productToEdit);
+
+  const [categoriesList, setCategoriesList] = useState(() => getAllCategories(existingCategories));
+  const [isCreatingNewCat, setIsCreatingNewCat] = useState(false);
+  const [newCatInput, setNewCatInput] = useState('');
+  const [catFeedback, setCatFeedback] = useState({ type: '', text: '' });
 
   const [formData, setFormData] = useState({
     nombre: '',
@@ -27,8 +32,19 @@ export default function ProductFormView({ productToEdit, onSaved, onBack, existi
     { label: 'Galletas Mantequilla', url: 'https://images.unsplash.com/photo-1558961363-fa8fdf82db35?q=80&w=400' }
   ];
 
-  const defaultCategories = ['Tartas', 'Cheesecakes', 'Macarons', 'Postres Especiales', 'Galletas'];
-  const allCategories = [...new Set([...defaultCategories, ...existingCategories])];
+  // Sincronizar categorías reactivamente
+  useEffect(() => {
+    setCategoriesList(getAllCategories(existingCategories));
+
+    const handleCatSync = () => {
+      setCategoriesList(getAllCategories(existingCategories));
+    };
+
+    window.addEventListener('serenoa_categories_updated', handleCatSync);
+    return () => {
+      window.removeEventListener('serenoa_categories_updated', handleCatSync);
+    };
+  }, [existingCategories]);
 
   useEffect(() => {
     if (productToEdit) {
@@ -43,9 +59,10 @@ export default function ProductFormView({ productToEdit, onSaved, onBack, existi
         activo: productToEdit.activo !== undefined ? productToEdit.activo : true
       });
     } else {
+      const currentAvailable = getAllCategories(existingCategories);
       setFormData({
         nombre: '',
-        categoria: allCategories[0] || 'Tartas',
+        categoria: currentAvailable[0] || 'Tartas',
         precio: '',
         costo: '',
         stock: '10',
@@ -56,7 +73,51 @@ export default function ProductFormView({ productToEdit, onSaved, onBack, existi
     }
     setErrorMsg('');
     setSuccessMsg('');
+    setIsCreatingNewCat(false);
+    setNewCatInput('');
+    setCatFeedback({ type: '', text: '' });
   }, [productToEdit]);
+
+  const handleCategorySelectChange = (e) => {
+    const val = e.target.value;
+    if (val === '__NEW_CATEGORY__') {
+      setIsCreatingNewCat(true);
+      setNewCatInput('');
+      setCatFeedback({ type: '', text: '' });
+    } else {
+      setIsCreatingNewCat(false);
+      setFormData(prev => ({ ...prev, categoria: val }));
+    }
+  };
+
+  const handleConfirmNewCategory = () => {
+    const trimmed = newCatInput.trim();
+    if (!trimmed) {
+      setCatFeedback({ type: 'error', text: 'Por favor escribe el nombre de la categoría' });
+      return;
+    }
+
+    // Validación preventiva para evitar duplicados (case-insensitive)
+    const exists = categoriesList.some(c => c.trim().toLowerCase() === trimmed.toLowerCase());
+    if (exists) {
+      setCatFeedback({ type: 'error', text: 'Categoría existente' });
+      return;
+    }
+
+    const res = saveCustomCategory(trimmed, existingCategories);
+    if (res.success) {
+      setCatFeedback({ type: 'success', text: 'Categoría agregada con exito!' });
+      setCategoriesList(prev => [...prev.filter(c => c.toLowerCase() !== trimmed.toLowerCase()), trimmed]);
+      setFormData(prev => ({ ...prev, categoria: trimmed }));
+      setNewCatInput('');
+      setTimeout(() => {
+        setIsCreatingNewCat(false);
+        setCatFeedback({ type: '', text: '' });
+      }, 1500);
+    } else {
+      setCatFeedback({ type: 'error', text: res.message || 'Categoría existente' });
+    }
+  };
 
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
@@ -141,11 +202,11 @@ export default function ProductFormView({ productToEdit, onSaved, onBack, existi
       };
 
       const targetId = productToEdit ? (productToEdit._id || productToEdit.id) : null;
-      await saveProduct(payload, targetId);
+      const res = await saveProduct(payload, targetId);
 
       setSuccessMsg(isEditing ? '¡Producto actualizado con éxito!' : '¡Producto agregado al catálogo!');
       setTimeout(() => {
-        if (onSaved) onSaved();
+        if (onSaved) onSaved(res?.data || { ...payload, id: targetId || `prod-${Date.now()}` });
       }, 700);
     } catch (err) {
       setErrorMsg(err.message || 'Error guardando producto en el servidor.');
@@ -229,14 +290,70 @@ export default function ProductFormView({ productToEdit, onSaved, onBack, existi
                 Categoría / Familia <span className="text-red-500">*</span>
               </label>
               <select 
-                value={formData.categoria}
-                onChange={e => setFormData({ ...formData, categoria: e.target.value })}
+                value={isCreatingNewCat ? '__NEW_CATEGORY__' : formData.categoria}
+                onChange={handleCategorySelectChange}
                 className="w-full px-4 py-2.5 rounded-xl border border-[#ECC979]/40 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#CF7D65]/20 focus:border-[#CF7D65] bg-white cursor-pointer"
               >
-                {allCategories.map(cat => (
+                {categoriesList.map(cat => (
                   <option key={cat} value={cat}>{cat}</option>
                 ))}
+                <option value="__NEW_CATEGORY__" className="font-bold text-[#CF7D65]">
+                  + Agregar nueva categoría
+                </option>
               </select>
+
+              {/* Creador inline de nueva categoría con validación de duplicados y mensajes específicos */}
+              {isCreatingNewCat && (
+                <div className="mt-2.5 p-3 rounded-xl bg-[#FAF6EF] border border-[#ECC979]/60 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-[#565935]">Nueva Categoría:</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsCreatingNewCat(false);
+                        setCatFeedback({ type: '', text: '' });
+                      }}
+                      className="text-[11px] text-gray-400 hover:text-gray-600 font-semibold cursor-pointer"
+                    >
+                      ✕ Cancelar
+                    </button>
+                  </div>
+                  <div className="flex gap-2">
+                    <input 
+                      type="text"
+                      autoFocus
+                      value={newCatInput}
+                      onChange={e => {
+                        setNewCatInput(e.target.value);
+                        if (catFeedback.text) setCatFeedback({ type: '', text: '' });
+                      }}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleConfirmNewCategory();
+                        }
+                      }}
+                      placeholder="Nombre de la categoría..."
+                      className="flex-1 px-3 py-1.5 rounded-lg border border-[#ECC979]/40 bg-white text-xs text-[#2E2A27] focus:outline-none focus:ring-2 focus:ring-[#CF7D65]/20 focus:border-[#CF7D65]"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleConfirmNewCategory}
+                      className="px-3.5 py-1.5 rounded-lg bg-[#565935] hover:bg-[#484B2C] text-white text-xs font-semibold shadow-xs cursor-pointer active:scale-95 transition-all"
+                    >
+                      Agregar
+                    </button>
+                  </div>
+                  {catFeedback.text && (
+                    <p className={`text-xs font-semibold flex items-center gap-1 mt-1 ${
+                      catFeedback.type === 'error' ? 'text-red-600' : 'text-emerald-600'
+                    }`}>
+                      <span>{catFeedback.type === 'error' ? '⚠️' : '✓'}</span>
+                      <span>{catFeedback.text}</span>
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             <div>

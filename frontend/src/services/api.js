@@ -231,7 +231,6 @@ export const fetchProducts = async () => {
 export const saveProduct = async (productData, id = null) => {
   const path = id ? `/api/productos/${id}` : '/api/productos';
   const urlsToTry = getEndpointsToTry(path);
-  
   const method = id ? 'PUT' : 'POST';
 
   for (const url of urlsToTry) {
@@ -243,33 +242,69 @@ export const saveProduct = async (productData, id = null) => {
       });
       if (res.ok) {
         const json = await res.json();
-        return json;
+        const savedProd = normalizeProduct(json.data || productData);
+        
+        // Actualizar caché local de inmediato
+        const currentProds = getCachedProducts();
+        let updatedList;
+        if (id) {
+          updatedList = currentProds.map(p => 
+            (String(p._id) === String(id) || String(p.id) === String(id)) ? savedProd : p
+          );
+        } else {
+          updatedList = [savedProd, ...currentProds.filter(p => 
+            String(p._id) !== String(savedProd._id) && String(p.id) !== String(savedProd.id)
+          )];
+        }
+        setCachedProducts(updatedList);
+        
+        // Notificar reactivamente a toda la aplicación (incluida la tienda pública)
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('serenoa_products_updated', { detail: updatedList }));
+        }
+
+        return { success: true, data: savedProd };
       }
     } catch (err) {}
   }
 
-  // Fallback a LocalStorage si el backend no responde
-  const local = JSON.parse(localStorage.getItem('serenoa_products') || '[]');
+  // Fallback reactivo a LocalStorage si el backend no responde
+  const currentProds = getCachedProducts();
+  let updatedList;
+  let savedProd;
   if (id) {
-    const idx = local.findIndex(p => p.id === id || p._id === id);
-    if (idx !== -1) {
-      local[idx] = { ...local[idx], ...productData };
-    }
+    savedProd = normalizeProduct({ ...productData, id, _id: id });
+    updatedList = currentProds.map(p => 
+      (String(p._id) === String(id) || String(p.id) === String(id)) ? savedProd : p
+    );
   } else {
-    const newProd = {
-      ...productData,
-      id: `prod-${Date.now()}`
-    };
-    local.unshift(newProd);
+    const tempId = `prod-${Date.now()}`;
+    savedProd = normalizeProduct({ ...productData, id: tempId, _id: tempId });
+    updatedList = [savedProd, ...currentProds];
   }
-  setCachedProducts(local);
-  return { success: true, message: 'Guardado localmente' };
+
+  setCachedProducts(updatedList);
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('serenoa_products_updated', { detail: updatedList }));
+  }
+
+  return { success: true, data: savedProd, message: 'Guardado localmente' };
 };
 
 /**
  * Eliminar producto
  */
 export const deleteProduct = async (id) => {
+  // Actualizar caché local de inmediato
+  const currentProds = getCachedProducts();
+  const filtered = currentProds.filter(p => String(p._id) !== String(id) && String(p.id) !== String(id));
+  setCachedProducts(filtered);
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('serenoa_products_updated', { detail: filtered }));
+  }
+
   const urlsToTry = getEndpointsToTry(`/api/productos/${id}`);
 
   for (const url of urlsToTry) {
@@ -279,10 +314,6 @@ export const deleteProduct = async (id) => {
     } catch (err) {}
   }
 
-  // Fallback local
-  const local = JSON.parse(localStorage.getItem('serenoa_products') || '[]');
-  const filtered = local.filter(p => p.id !== id && p._id !== id);
-  setCachedProducts(filtered);
   return { success: true };
 };
 
@@ -351,7 +382,7 @@ export const fetchOrders = async () => {
     {
       _id: "ord-101",
       codigo: "SER-8492",
-      cliente: { nombre: "Valeria Montero", telefono: "+593987654321", metodoPago: "WhatsApp / Transferencia" },
+      cliente: { nombre: "Valeria Montero", telefono: "+593987654321", metodoPago: "Transferencia" },
       productos: [
         { nombre: "Tarta de Fresa Clásica", cantidad: 2, precioUnitario: 15.00 },
         { nombre: "Caja de Macarons Franceses (x6)", cantidad: 1, precioUnitario: 12.00 }
@@ -374,7 +405,7 @@ export const fetchOrders = async () => {
     {
       _id: "ord-103",
       codigo: "SER-8494",
-      cliente: { nombre: "Ana Sofía Rivas", telefono: "+593984561230", metodoPago: "Transferencia Bancaria" },
+      cliente: { nombre: "Ana Sofía Rivas", telefono: "+593984561230", metodoPago: "Transferencia" },
       productos: [
         { nombre: "Tarta Selva Negra de Autor", cantidad: 1, precioUnitario: 22.00 },
         { nombre: "Galletas de mantequilla", cantidad: 2, precioUnitario: 5.00 }
@@ -390,7 +421,11 @@ export const fetchOrders = async () => {
 const syncLocalOrderUpdate = (orderId, updatePayload) => {
   try {
     const orders = JSON.parse(localStorage.getItem('serenoa_orders') || '[]');
-    const idx = orders.findIndex(o => o._id === orderId || o.id === orderId || o.codigo === orderId);
+    const idx = orders.findIndex(o => 
+      String(o._id) === String(orderId) || 
+      String(o.id) === String(orderId) || 
+      String(o.codigo) === String(orderId)
+    );
     if (idx !== -1) {
       const current = orders[idx];
       const mergedCliente = updatePayload.cliente
@@ -413,7 +448,11 @@ const syncLocalOrderUpdate = (orderId, updatePayload) => {
 const syncLocalOrderDelete = (orderId) => {
   try {
     const orders = JSON.parse(localStorage.getItem('serenoa_orders') || '[]');
-    const filtered = orders.filter(o => o._id !== orderId && o.id !== orderId && o.codigo !== orderId);
+    const filtered = orders.filter(o => 
+      String(o._id) !== String(orderId) && 
+      String(o.id) !== String(orderId) && 
+      String(o.codigo) !== String(orderId)
+    );
     localStorage.setItem('serenoa_orders', JSON.stringify(filtered));
   } catch (e) {}
 };
@@ -504,4 +543,82 @@ export const loginAdmin = async (username, password) => {
   }
 
   throw new Error('Credenciales inválidas. Usuario o contraseña incorrectos.');
+};
+
+/**
+ * ============================================================================
+ * GESTIÓN CENTRALIZADA Y REACTIVA DE CATEGORÍAS
+ * ============================================================================
+ */
+
+export const getCustomCategories = () => {
+  try {
+    const stored = localStorage.getItem('serenoa_categories');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed)) return parsed.filter(Boolean);
+    }
+  } catch (e) {}
+  return [];
+};
+
+export const getAllCategories = (products = []) => {
+  const defaults = ['Tartas', 'Cheesecakes', 'Macarons', 'Postres Especiales', 'Galletas'];
+  const fromProds = Array.isArray(products) ? products.map(p => p.categoria).filter(Boolean) : [];
+  const fromStorage = getCustomCategories();
+
+  const seen = new Set();
+  const result = [];
+
+  [...defaults, ...fromStorage, ...fromProds].forEach(cat => {
+    const trimmed = String(cat).trim();
+    if (!trimmed) return;
+    const lower = trimmed.toLowerCase();
+    if (!seen.has(lower)) {
+      seen.add(lower);
+      result.push(trimmed);
+    }
+  });
+
+  return result;
+};
+
+export const saveCustomCategory = (categoryName, products = []) => {
+  const trimmed = String(categoryName || '').trim();
+  if (!trimmed) {
+    return { success: false, message: 'Por favor escribe un nombre de categoría' };
+  }
+
+  const allCurrent = getAllCategories(products);
+  const exists = allCurrent.some(c => c.toLowerCase() === trimmed.toLowerCase());
+  if (exists) {
+    return { success: false, message: 'Categoría existente' };
+  }
+
+  const custom = getCustomCategories();
+  const updated = [...custom.filter(c => c.toLowerCase() !== trimmed.toLowerCase()), trimmed];
+  try {
+    localStorage.setItem('serenoa_categories', JSON.stringify(updated));
+  } catch (e) {}
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('serenoa_categories_updated', { detail: updated }));
+  }
+
+  return { success: true, message: 'Categoría agregada con exito!', category: trimmed };
+};
+
+export const deleteCustomCategory = (categoryName) => {
+  const trimmed = String(categoryName || '').trim().toLowerCase();
+  const current = getCustomCategories();
+  const updated = current.filter(c => c.toLowerCase() !== trimmed);
+  try {
+    localStorage.setItem('serenoa_categories', JSON.stringify(updated));
+  } catch (e) {}
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('serenoa_categories_updated', { detail: updated }));
+  }
+
+  return updated;
 };

@@ -110,11 +110,11 @@ export default function NewOrderView({ products = [], onOrderCreated, onBack }) 
         notas: notas.trim()
       };
 
-      await createOrder(payload);
+      const res = await createOrder(payload);
 
       setSuccessMsg(`¡Pedido ${codigo} registrado con éxito!`);
       setTimeout(() => {
-        if (onOrderCreated) onOrderCreated();
+        if (onOrderCreated) onOrderCreated(res?.data || { ...payload, _id: `ord-${Date.now()}` });
       }, 700);
     } catch (err) {
       setErrorMsg(err.message || 'Error al registrar el pedido en el sistema.');

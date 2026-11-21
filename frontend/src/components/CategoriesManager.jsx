@@ -1,27 +1,26 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { getAllCategories, saveCustomCategory, deleteCustomCategory } from '../services/api';
 
 export default function CategoriesManager({ products = [], onCategoriesUpdated }) {
-  const [categories, setCategories] = useState(() => {
-    try {
-      const stored = JSON.parse(localStorage.getItem('serenoa_categories') || '[]');
-      if (Array.isArray(stored) && stored.length > 0) return stored;
-    } catch (e) {}
-    const fromProds = [...new Set(products.map(p => p.categoria).filter(Boolean))];
-    return fromProds.length > 0 ? fromProds : ['Tartas', 'Cheesecakes', 'Macarons', 'Postres Especiales', 'Galletas'];
-  });
-
+  const [categories, setCategories] = useState(() => getAllCategories(products));
   const [newCatName, setNewCatName] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [confirmDeleteCat, setConfirmDeleteCat] = useState(null);
 
-  const saveCategories = (updated) => {
-    setCategories(updated);
-    try {
-      localStorage.setItem('serenoa_categories', JSON.stringify(updated));
-    } catch (e) {}
-    if (onCategoriesUpdated) onCategoriesUpdated(updated);
-  };
+  // Sincronización reactiva bidireccional con toda la aplicación
+  useEffect(() => {
+    setCategories(getAllCategories(products));
+
+    const handleSync = () => {
+      setCategories(getAllCategories(products));
+    };
+
+    window.addEventListener('serenoa_categories_updated', handleSync);
+    return () => {
+      window.removeEventListener('serenoa_categories_updated', handleSync);
+    };
+  }, [products]);
 
   const handleAdd = (e) => {
     e.preventDefault();
@@ -34,23 +33,27 @@ export default function CategoriesManager({ products = [], onCategoriesUpdated }
       return;
     }
 
-    if (categories.some(c => c.toLowerCase() === trimmed.toLowerCase())) {
-      setErrorMessage('Esa categoría ya existe.');
+    const res = saveCustomCategory(trimmed, products);
+    if (!res.success) {
+      setErrorMessage(res.message);
       return;
     }
 
-    const updated = [...categories, trimmed];
-    saveCategories(updated);
+    const updated = getAllCategories(products);
+    setCategories(updated);
     setNewCatName('');
-    setSuccessMessage(`Categoría "${trimmed}" agregada exitosamente.`);
-    setTimeout(() => setSuccessMessage(''), 3000);
+    setSuccessMessage(res.message);
+    if (onCategoriesUpdated) onCategoriesUpdated(updated);
+    setTimeout(() => setSuccessMessage(''), 3500);
   };
 
   const handleDelete = (catName) => {
-    const updated = categories.filter(c => c !== catName);
-    saveCategories(updated);
+    deleteCustomCategory(catName);
+    const updated = getAllCategories(products);
+    setCategories(updated);
     setConfirmDeleteCat(null);
     setSuccessMessage(`Categoría "${catName}" eliminada.`);
+    if (onCategoriesUpdated) onCategoriesUpdated(updated);
     setTimeout(() => setSuccessMessage(''), 3000);
   };
 
